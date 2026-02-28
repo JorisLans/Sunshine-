@@ -3,127 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Map Overlay & Animatie</title>
+    <title>Zonlicht Simulator - Geïntegreerd op Kaart</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
-        .container { display: flex; gap: 20px; flex: 1; min-height: 400px; }
-        .panel { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; display: flex; flex-direction: column; }
-        #map { flex: 1; border-radius: 8px; border: 1px solid #ddd; min-height: 300px; }
-        #canvas-container { flex: 1; display: flex; justify-content: center; align-items: center; background: #fafafa; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid #ddd; }
-        canvas { background: #fff; border-radius: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
-        .controls { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .control-group { display: flex; flex-direction: column; gap: 8px; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Kaart vult de volledige beschikbare ruimte */
+        #map { flex: 1; width: 100%; z-index: 1; }
+
+        /* Bedieningspaneel onderaan */
+        .controls { 
+            background: white; 
+            padding: 20px; 
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.2); 
+            display: grid; 
+            grid-template-columns: 1.5fr 1fr; 
+            gap: 20px; 
+            z-index: 10; 
+            max-height: 250px;
+        }
+
+        .control-group { display: flex; flex-direction: column; gap: 10px; }
         .time-header { display: flex; justify-content: space-between; align-items: center; }
-        label { font-weight: bold; font-size: 13px; color: #333; }
+        label { font-weight: bold; font-size: 14px; color: #333; }
+        
         input[type="range"] { width: 100%; cursor: pointer; }
-        .buttons { display: flex; gap: 8px; margin-top: 5px; }
-        button { flex: 1; padding: 8px; border: none; background: #4A90E2; color: white; border-radius: 5px; cursor: pointer; font-size: 12px; transition: background 0.3s; }
+        .buttons { display: flex; gap: 8px; }
+        
+        button { 
+            flex: 1; padding: 10px; border: none; background: #4A90E2; color: white; 
+            border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;
+        }
         button:hover { background: #357ABD; }
-        #playBtn { flex: 0 0 auto; padding: 4px 12px; background: #2ecc71; font-weight: bold; }
-        #playBtn:hover { background: #27ae60; }
+        
+        #playBtn { flex: 0 0 100px; background: #2ecc71; }
         #playBtn.playing { background: #e74c3c; }
-        #playBtn.playing:hover { background: #c0392b; }
-        .info { grid-column: span 2; font-size: 13px; color: #444; background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; border-left: 4px solid #4A90E2; }
-        h3 { margin-top: 0; margin-bottom: 10px; font-size: 18px; color: #222; }
+
+        .info { 
+            grid-column: span 2; font-size: 13px; color: #555; background: #f8f9fa; 
+            padding: 8px; border-radius: 4px; text-align: center; border: 1px solid #eee;
+        }
+
+        /* Responsive voor kleine schermen */
+        @media (max-width: 768px) {
+            .controls { grid-template-columns: 1fr; overflow-y: auto; }
+            .info { grid-column: auto; }
+        }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div class="panel">
-            <h3>1. Simulatie op de kaart</h3>
-            <div id="map"></div>
-        </div>
-
-        <div class="panel" id="canvas-panel">
-            <h3>2. Simulatie (Bovenaanzicht)</h3>
-            <div id="canvas-container">
-                <canvas id="roomCanvas" width="400" height="400"></canvas>
-            </div>
-        </div>
-    </div>
+    <div id="map"></div>
 
     <div class="controls">
         <div class="control-group">
             <div class="time-header">
-                <label>Tijd van de dag: <span id="timeVal">12:00</span></label>
+                <label>Tijd: <span id="timeVal">12:00</span></label>
                 <button id="playBtn" onclick="togglePlay()">▶ Play</button>
             </div>
             <input type="range" id="timeSlider" min="0" max="1439" value="720">
 
-            <label style="margin-top: 10px;">Datum: <span id="dateVal">Vandaag</span></label>
+            <label>Datum:</label>
             <input type="date" id="datePicker">
             
             <div class="buttons">
-                <button onclick="setSeason('zomer')">Midzomer</button>
-                <button onclick="setSeason('winter')">Midwinter</button>
+                <button onclick="setSeason('zomer')">Zomer</button>
+                <button onclick="setSeason('winter')">Winter</button>
                 <button onclick="setSeason('nu')">Nu</button>
             </div>
         </div>
 
         <div class="control-group">
-            <label>Draai de kamer: <span id="rotationVal">0</span>°</label>
+            <label>Oriëntatie kamer: <span id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
-            <p style="font-size: 11px; color: #777;">Tip: Draai de kamer zodat het blauwe raam naar de zon wijst (180° = Zuiden).</p>
+            <p style="font-size: 11px; color: #777; margin: 0;">Sleep de marker op de kaart om de kamer te verplaatsen. De blauwe lijn is het raam.</p>
         </div>
 
-        <div class="info" id="sunInfo">Berekenen...</div>
+        <div class="info" id="sunInfo">Klik op de kaart om te beginnen...</div>
     </div>
 
     <script>
-        let lat = 51.0289; 
-        let lng = 3.0142; 
+        // Startinstellingen
+        let lat = 51.0289, lng = 3.0142; 
         let currentDate = new Date();
         let roomRotation = 180;
+        const earthRadius = 6378137;
 
+        // UI Elementen
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         const rotationSlider = document.getElementById('rotationSlider');
-        const canvas = document.getElementById('roomCanvas');
         const playBtn = document.getElementById('playBtn');
-        const ctx = canvas.getContext('2d');
-
         datePicker.valueAsDate = currentDate;
 
-        // Leaflet Kaart Initialisatie (Dichtbij ingezoomd: zoomniveau 19)
+        // Kaart initialiseren
         const map = L.map('map').setView([lat, lng], 19);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap',
-            maxZoom: 21
+            maxZoom: 22
         }).addTo(map);
 
-        // Laag voor de getekende kamer op de kaart
-        let mapSimulationLayer = L.featureGroup().addTo(map);
+        // Laag voor de simulatie-elementen (kamer + licht)
+        let simulationLayer = L.featureGroup().addTo(map);
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
 
+        // --- Event Listeners ---
         function onLocationChange(e) {
             const pos = e.latlng || e.target.getLatLng();
-            lat = pos.lat;
-            lng = pos.lng;
+            lat = pos.lat; lng = pos.lng;
             marker.setLatLng([lat, lng]);
             updateSimulation();
         }
 
         map.on('click', onLocationChange);
-        marker.on('dragend', onLocationChange);
+        marker.on('drag', onLocationChange);
 
-        function updateTimeFromSlider() {
-            currentDate.setHours(Math.floor(timeSlider.value / 60), timeSlider.value % 60);
+        timeSlider.oninput = function() {
+            currentDate.setHours(Math.floor(this.value / 60), this.value % 60);
             document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             updateSimulation();
-        }
+        };
 
-        timeSlider.oninput = updateTimeFromSlider;
         timeSlider.addEventListener('mousedown', () => { if (isPlaying) togglePlay(); });
-        timeSlider.addEventListener('touchstart', () => { if (isPlaying) togglePlay(); });
 
         datePicker.onchange = function() {
             let d = new Date(this.value);
             currentDate.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
-            document.getElementById('dateVal').textContent = currentDate.toLocaleDateString();
             updateSimulation();
         };
 
@@ -133,149 +140,93 @@
             updateSimulation();
         };
 
-        function setSeason(s) {
-            let y = new Date().getFullYear();
-            if(s === 'zomer') currentDate = new Date(y, 5, 21, 12, 0);
-            if(s === 'winter') currentDate = new Date(y, 11, 21, 12, 0);
-            if(s === 'nu') currentDate = new Date();
-            
-            datePicker.valueAsDate = currentDate;
-            timeSlider.value = currentDate.getHours() * 60 + currentDate.getMinutes();
-            document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            document.getElementById('dateVal').textContent = currentDate.toLocaleDateString();
-            updateSimulation();
-        }
-
-        let isPlaying = false;
-        let animationInterval;
-
-        function togglePlay() {
-            isPlaying = !isPlaying;
-            if (isPlaying) {
-                playBtn.innerHTML = '⏸ Pauze';
-                playBtn.classList.add('playing');
-                animationInterval = setInterval(() => {
-                    let currentVal = parseInt(timeSlider.value);
-                    currentVal += 3;
-                    if (currentVal >= 1439) currentVal = 0;
-                    timeSlider.value = currentVal;
-                    updateTimeFromSlider();
-                }, 40);
-            } else {
-                playBtn.innerHTML = '▶ Play';
-                playBtn.classList.remove('playing');
-                clearInterval(animationInterval);
-            }
-        }
-
-        // --- Helper functie om meters om te zetten naar GPS coördinaten ---
-        function getMapLatLng(x, y) {
-            // Roteer de x/y coördinaten (in meters) rond de oorsprong
+        // --- Hulpfunctie: Meters naar GPS-punten ---
+        function getPoint(x, y) {
+            // Roteer de coördinaten rond het middelpunt op basis van kamer-oriëntatie
             let rad = roomRotation * Math.PI / 180;
             let rx = x * Math.cos(rad) + y * Math.sin(rad);
             let ry = -x * Math.sin(rad) + y * Math.cos(rad);
 
-            // Zet de geroteerde meters om naar een verschil in lengte- en breedtegraad
-            let earthRadius = 6378137;
             let dLat = (ry / earthRadius) * (180 / Math.PI);
             let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
-
             return [lat + dLat, lng + dLng];
         }
 
-        // --- Hoofd render functie ---
+        // --- Hoofdfunctie: Teken alles op de kaart ---
         function updateSimulation() {
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
             let azimuthDeg = (sunPos.azimuth * 180 / Math.PI) + 180;
             let altitudeDeg = sunPos.altitude * 180 / Math.PI;
 
-            document.getElementById('sunInfo').innerHTML = `Zonrichting: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}° | Locatie: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            document.getElementById('sunInfo').innerHTML = 
+                `Zon: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}° | Coördinaten: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
-            // ==========================================
-            // DEEL 1: TEKEN OP DE INTERACTIEVE KAART
-            // ==========================================
-            mapSimulationLayer.clearLayers();
+            simulationLayer.clearLayers();
 
-            let s = 10; // Halve grootte van de kamer in meters (dus 20x20 meter in totaal)
-            let w = 4;  // Halve breedte van het raam in meters
+            // Afmetingen kamer in meters
+            let s = 6; // Halve kamer (totaal 12m x 12m)
+            let w = 2.5; // Halve breedte raam
 
-            // Kamer Vloer
-            let floorPts = [ getMapLatLng(-s, s), getMapLatLng(s, s), getMapLatLng(s, -s), getMapLatLng(-s, -s) ];
-            L.polygon(floorPts, {color: '#2c3e50', weight: 3, fillColor: '#f9f9f9', fillOpacity: 0.8}).addTo(mapSimulationLayer);
+            // 1. Teken de Vloer
+            let floorCoords = [getPoint(-s, s), getPoint(s, s), getPoint(s, -s), getPoint(-s, -s)];
+            L.polygon(floorCoords, {
+                color: '#2c3e50', weight: 2, fillColor: '#ffffff', fillOpacity: 0.7
+            }).addTo(simulationLayer);
 
-            // Zonlicht op de kaart
+            // 2. Teken het Licht
             if (altitudeDeg > 0) {
                 let relAzimuth = azimuthDeg - roomRotation;
                 let rad = relAzimuth * Math.PI / 180;
-                let vx = -Math.sin(rad); 
+                let vx = -Math.sin(rad);
                 let vy = Math.cos(rad);
 
                 if (vy > 0) {
-                    let lightLen = Math.max(0, (90 - altitudeDeg) * 0.5); // Lengte van de zonnestraal op de kaart
-                    let lightPts = [
-                        getMapLatLng(-w, s), // Links raam
-                        getMapLatLng(w, s),  // Rechts raam
-                        getMapLatLng(w + (vx * lightLen), s - (vy * lightLen)), // Rechts einde straal
-                        getMapLatLng(-w + (vx * lightLen), s - (vy * lightLen)) // Links einde straal
+                    let lightLen = Math.max(0, (90 - altitudeDeg) * 0.4); // Factor voor schaduwlengte
+                    let lightCoords = [
+                        getPoint(-w, s), 
+                        getPoint(w, s),
+                        getPoint(w + (vx * lightLen), s - (vy * lightLen)),
+                        getPoint(-w + (vx * lightLen), s - (vy * lightLen))
                     ];
-                    L.polygon(lightPts, {stroke: false, fillColor: '#ffe600', fillOpacity: 0.5}).addTo(mapSimulationLayer);
+                    L.polygon(lightCoords, {
+                        stroke: false, fillColor: '#f1c40f', fillOpacity: 0.6
+                    }).addTo(simulationLayer);
                 }
             }
 
-            // Raam lijn
-            let windowPts = [ getMapLatLng(-w, s), getMapLatLng(w, s) ];
-            L.polyline(windowPts, {color: '#3498db', weight: 6}).addTo(mapSimulationLayer);
-
-
-            // ==========================================
-            // DEEL 2: TEKEN OP HET 2D CANVAS (Rechterkant)
-            // ==========================================
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let cx = 200, cy = 200, size = 160, win = 70;
-
-            ctx.fillStyle = '#888';
-            ctx.font = 'bold 16px Arial';
-            ctx.fillText('N', cx - 6, 25);
-
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate(roomRotation * Math.PI / 180);
-
-            ctx.fillStyle = "#f9f9f9";
-            ctx.fillRect(-size/2, -size/2, size, size);
-
-            if (altitudeDeg > 0) {
-                let relAzimuth = azimuthDeg - roomRotation;
-                let rad = relAzimuth * Math.PI / 180;
-                let vx = -Math.sin(rad); 
-                let vy = Math.cos(rad);
-
-                if (vy > 0) {
-                    let lightLen = Math.max(0, (90 - altitudeDeg) * 4);
-                    ctx.beginPath();
-                    ctx.moveTo(-win/2, -size/2);
-                    ctx.lineTo(win/2, -size/2);
-                    ctx.lineTo(win/2 + (vx * lightLen), -size/2 + (vy * lightLen));
-                    ctx.lineTo(-win/2 + (vx * lightLen), -size/2 + (vy * lightLen));
-                    ctx.closePath();
-                    ctx.fillStyle = "rgba(255, 230, 0, 0.4)";
-                    ctx.fill();
-                }
-            }
-
-            ctx.strokeStyle = "#2c3e50";
-            ctx.lineWidth = 5;
-            ctx.strokeRect(-size/2, -size/2, size, size);
-            
-            ctx.strokeStyle = "#3498db";
-            ctx.beginPath();
-            ctx.moveTo(-win/2, -size/2);
-            ctx.lineTo(win/2, -size/2);
-            ctx.stroke();
-
-            ctx.restore();
+            // 3. Teken het Raam (blauw accent)
+            let windowCoords = [getPoint(-w, s), getPoint(w, s)];
+            L.polyline(windowCoords, { color: '#3498db', weight: 5, opacity: 1 }).addTo(simulationLayer);
         }
 
+        // --- Animatie ---
+        let isPlaying = false, animationInterval;
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playBtn.innerHTML = '⏸ Pauze'; playBtn.classList.add('playing');
+                animationInterval = setInterval(() => {
+                    let v = (parseInt(timeSlider.value) + 4) % 1440;
+                    timeSlider.value = v;
+                    timeSlider.oninput();
+                }, 50);
+            } else {
+                playBtn.innerHTML = '▶ Play'; playBtn.classList.remove('playing');
+                clearInterval(animationInterval);
+            }
+        }
+
+        function setSeason(s) {
+            let y = new Date().getFullYear();
+            if(s === 'zomer') currentDate = new Date(y, 5, 21, 12, 0);
+            if(s === 'winter') currentDate = new Date(y, 11, 21, 12, 0);
+            if(s === 'nu') currentDate = new Date();
+            datePicker.valueAsDate = currentDate;
+            timeSlider.value = currentDate.getHours() * 60 + currentDate.getMinutes();
+            timeSlider.oninput();
+        }
+
+        // Start de simulatie
         updateSimulation();
     </script>
 </body>
