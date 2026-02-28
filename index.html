@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Loggia & Terras</title>
+    <title>Zonlicht Simulator - Gecorrigeerde Logica</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -50,22 +50,22 @@
         </div>
 
         <div class="control-group">
-            <label>Oriëntatie: <span id="rotationVal">180</span>°</label>
+            <label>Oriëntatie Terras: <span id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
             
             <div class="options-box">
                 <label class="checkbox-item">
-                    <input type="checkbox" id="roofToggle" onchange="updateSimulation()"> 
-                    Terras heeft een dak (overdekt)
+                    <input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> 
+                    Terras is overdekt (verdiep erboven)
                 </label>
                 <label class="checkbox-item">
-                    <input type="checkbox" id="wallsToggle" onchange="updateSimulation()"> 
-                    Terras heeft zijmuren (loggia)
+                    <input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> 
+                    Zijmuren aanwezig (Loggia)
                 </label>
             </div>
         </div>
 
-        <div class="info" id="sunInfo">Sleep de marker naar jouw locatie...</div>
+        <div class="info" id="sunInfo">De blauwe lijn is het raam, het grijze vlak is het terras.</div>
     </div>
 
     <script>
@@ -79,7 +79,7 @@
         const wallsToggle = document.getElementById('wallsToggle');
         datePicker.valueAsDate = currentDate;
 
-        const map = L.map('map').setView([lat, lng], 19);
+        const map = L.map('map').setView([lat, lng], 20);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
 
         let simulationLayer = L.featureGroup().addTo(map);
@@ -119,99 +119,93 @@
         function updateSimulation() {
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
             let azimuthDeg = (sunPos.azimuth * 180 / Math.PI) + 180;
-            let altitudeDeg = sunPos.altitude * 180 / Math.PI;
             let altitudeRad = sunPos.altitude;
+            let altitudeDeg = altitudeRad * 180 / Math.PI;
 
-            document.getElementById('sunInfo').innerHTML = `Zonrichting: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}°`;
+            document.getElementById('sunInfo').innerHTML = `Zon: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}°`;
 
             simulationLayer.clearLayers();
 
-            let s = 5;      // Halve kamer
-            let w = 2.5;    // Halve breedte raam
-            let tD = 4;     // Diepte terras
-            let h = 2.6;    // Hoogte verdiep
+            let s = 5;      // Kamer half-breedte
+            let w = 2.5;    // Raam half-breedte
+            let tD = 4;     // Terras diepte
+            let h = 2.7;    // Plafondhoogte
 
-            // 1. Appartement
+            // 1. Basis: Kamer en Terras vloer
             L.polygon([getPoint(-s, s), getPoint(s, s), getPoint(s, -s), getPoint(-s, -s)], {
                 color: '#2c3e50', weight: 2, fillColor: '#fff', fillOpacity: 0.8
             }).addTo(simulationLayer);
-
-            // 2. Terras Vloer
+            
             L.polygon([getPoint(-s, s), getPoint(s, s), getPoint(s, s+tD), getPoint(-s, s+tD)], {
                 color: '#7f8c8d', weight: 1, fillColor: '#bdc3c7', fillOpacity: 0.6
             }).addTo(simulationLayer);
 
-            // 3. Raam
+            // 2. Muren en Ramen
             L.polyline([getPoint(-w, s), getPoint(w, s)], { color: '#3498db', weight: 6 }).addTo(simulationLayer);
-
-            // 4. Zijmuren (indien geselecteerd)
             if (wallsToggle.checked) {
-                L.polyline([getPoint(-s, s), getPoint(-s, s+tD)], { color: '#2c3e50', weight: 5 }).addTo(simulationLayer);
-                L.polyline([getPoint(s, s), getPoint(s, s+tD)], { color: '#2c3e50', weight: 5 }).addTo(simulationLayer);
+                L.polyline([getPoint(-s, s), getPoint(-s, s+tD)], { color: '#2c3e50', weight: 4 }).addTo(simulationLayer);
+                L.polyline([getPoint(s, s), getPoint(s, s+tD)], { color: '#2c3e50', weight: 4 }).addTo(simulationLayer);
             }
 
-            // 5. Zonlicht & Schaduw
+            // 3. De Licht-Logica
             if (altitudeDeg > 0) {
                 let relAzimuth = azimuthDeg - roomRotation;
                 let rad = relAzimuth * Math.PI / 180;
                 let vx = -Math.sin(rad);
                 let vy = Math.cos(rad);
 
-                let shadowLength = h / Math.tan(altitudeRad);
-                
-                // Bereken lichtvlek op terras
-                if (vy > -0.5) {
-                    let startY = s;
-                    if (roofToggle.checked) startY = s + Math.min(tD, shadowLength);
-                    
-                    if (startY < s + tD) {
-                        // Basis lichtvlak
+                if (vy > -0.5) { // Zon komt van de voorkant
+                    // Schaduw van de dakrand valt naar binnen
+                    // De dakrand bevindt zich op y = s + tD
+                    let shadowL = h / Math.tan(altitudeRad);
+                    let shadowBoundaryY = (s + tD) - shadowL;
+
+                    // Waar begint en eindigt het licht op de y-as?
+                    let lightStart = Math.max(s - 10, shadowBoundaryY); // Licht kan kamer in gaan
+                    let lightEnd = s + tD; // Licht stopt aan de rand van het terras
+
+                    if (lightEnd > lightStart) {
+                        // Bereken zijwaartse schaduw van muren (vx)
                         let xL = -s, xR = s;
-
-                        // Pas xL en xR aan op basis van zijmuur schaduw
                         if (wallsToggle.checked) {
-                            let wallShadowX = shadowLength * vx;
-                            if (vx > 0) xL = Math.max(-s, -s + wallShadowX);
-                            if (vx < 0) xR = Math.min(s, s + wallShadowX);
+                            // De schaduw van een muur op afstand d is d * tan(relAzimuth)
+                            // Maar makkelijker: gebruik de vx/vy verhouding
+                            let wallShadowOffset = shadowL * vx;
+                            if (vx > 0) xL = Math.max(-s, -s + wallShadowOffset);
+                            if (vx < 0) xR = Math.min(s, s + wallShadowOffset);
                         }
 
-                        if (xR > xL) {
-                            let terraceLight = [
-                                getPoint(xL, startY), getPoint(xR, startY),
-                                getPoint(xR, s + tD), getPoint(xL, s + tD)
-                            ];
-                            L.polygon(terraceLight, { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.4 }).addTo(simulationLayer);
-                        }
-                    }
-                }
-
-                // Licht binnen (rekening houdend met zowel dak als muren)
-                if (vy > 0) {
-                    let roomLightDepth = Math.max(0, (90 - altitudeDeg) * 0.4);
-                    if (roofToggle.checked) roomLightDepth = Math.max(0, roomLightDepth - (shadowLength - tD));
-
-                    if (roomLightDepth > 0) {
-                        let rxL = -w, rxR = w;
-                        if (wallsToggle.checked) {
-                            let wallShadowX = shadowLength * vx;
-                            if (vx > 0) rxL = Math.max(-w, -w + wallShadowX);
-                            if (vx < 0) rxR = Math.min(w, w + wallShadowX);
+                        // Teken Licht op Terras
+                        let terraceLightYStart = Math.max(s, lightStart);
+                        if (terraceLightYStart < lightEnd) {
+                            L.polygon([
+                                getPoint(xL, terraceLightYStart), getPoint(xR, terraceLightYStart),
+                                getPoint(xR, lightEnd), getPoint(xL, lightEnd)
+                            ], { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.4 }).addTo(simulationLayer);
                         }
 
-                        if (rxR > rxL) {
-                            let roomLight = [
-                                getPoint(rxL, s), getPoint(rxR, s),
-                                getPoint(rxR + (vx * roomLightDepth), s - (vy * roomLightDepth)),
-                                getPoint(rxL + (vx * roomLightDepth), s - (vy * roomLightDepth))
-                            ];
-                            L.polygon(roomLight, { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.6 }).addTo(simulationLayer);
+                        // Teken Licht in Kamer (door het raam)
+                        if (lightStart < s) {
+                            let roomLightEnd = s;
+                            let roomLightStart = lightStart;
+                            
+                            // Beperk breedte tot raambreedte
+                            let rxL = Math.max(-w, xL);
+                            let rxR = Math.min(w, xR);
+
+                            if (rxR > rxL) {
+                                L.polygon([
+                                    getPoint(rxL, roomLightStart), getPoint(rxR, roomLightStart),
+                                    getPoint(rxR, roomLightEnd), getPoint(rxL, roomLightEnd)
+                                ], { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.6 }).addTo(simulationLayer);
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Animatie-functies
+        // --- Rest van de functies (Play/Seizoenen) blijven hetzelfde ---
         let isPlaying = false, animationInterval;
         function togglePlay() {
             isPlaying = !isPlaying;
