@@ -3,54 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Geïntegreerd op Kaart</title>
+    <title>Zonlicht Simulator - Appartement met Terras</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* Kaart vult de volledige beschikbare ruimte */
         #map { flex: 1; width: 100%; z-index: 1; }
-
-        /* Bedieningspaneel onderaan */
         .controls { 
-            background: white; 
-            padding: 20px; 
-            box-shadow: 0 -4px 15px rgba(0,0,0,0.2); 
-            display: grid; 
-            grid-template-columns: 1.5fr 1fr; 
-            gap: 20px; 
-            z-index: 10; 
-            max-height: 250px;
+            background: white; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.2); 
+            display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; z-index: 10; 
         }
-
-        .control-group { display: flex; flex-direction: column; gap: 10px; }
+        .control-group { display: flex; flex-direction: column; gap: 8px; }
         .time-header { display: flex; justify-content: space-between; align-items: center; }
         label { font-weight: bold; font-size: 14px; color: #333; }
-        
         input[type="range"] { width: 100%; cursor: pointer; }
-        .buttons { display: flex; gap: 8px; }
-        
-        button { 
-            flex: 1; padding: 10px; border: none; background: #4A90E2; color: white; 
-            border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;
-        }
-        button:hover { background: #357ABD; }
-        
-        #playBtn { flex: 0 0 100px; background: #2ecc71; }
+        .buttons { display: flex; gap: 8px; margin-top: 5px; }
+        button { flex: 1; padding: 10px; border: none; background: #4A90E2; color: white; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        #playBtn { flex: 0 0 100px; background: #2ecc71; font-weight: bold; }
         #playBtn.playing { background: #e74c3c; }
-
-        .info { 
-            grid-column: span 2; font-size: 13px; color: #555; background: #f8f9fa; 
-            padding: 8px; border-radius: 4px; text-align: center; border: 1px solid #eee;
-        }
-
-        /* Responsive voor kleine schermen */
-        @media (max-width: 768px) {
-            .controls { grid-template-columns: 1fr; overflow-y: auto; }
-            .info { grid-column: auto; }
-        }
+        .checkbox-group { display: flex; align-items: center; gap: 10px; background: #f0f7ff; padding: 10px; border-radius: 6px; border: 1px solid #d0e2ff; }
+        .info { grid-column: span 2; font-size: 12px; color: #555; background: #f8f9fa; padding: 8px; border-radius: 4px; text-align: center; }
     </style>
 </head>
 <body>
@@ -76,40 +49,35 @@
         </div>
 
         <div class="control-group">
-            <label>Oriëntatie kamer: <span id="rotationVal">180</span>°</label>
+            <label>Oriëntatie: <span id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
-            <p style="font-size: 11px; color: #777; margin: 0;">Sleep de marker op de kaart om de kamer te verplaatsen. De blauwe lijn is het raam.</p>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="roofToggle" onchange="updateSimulation()">
+                <label for="roofToggle" style="cursor:pointer">Terras heeft een dak (verdiep erboven)</label>
+            </div>
+            <p style="font-size: 11px; color: #777; margin: 0;">Blauwe lijn = raam. Grijs vlak = terras.</p>
         </div>
 
-        <div class="info" id="sunInfo">Klik op de kaart om te beginnen...</div>
+        <div class="info" id="sunInfo">Laden...</div>
     </div>
 
     <script>
-        // Startinstellingen
-        let lat = 51.0289, lng = 3.0142; 
-        let currentDate = new Date();
-        let roomRotation = 180;
+        let lat = 51.0289, lng = 3.0142, currentDate = new Date(), roomRotation = 180;
         const earthRadius = 6378137;
 
-        // UI Elementen
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         const rotationSlider = document.getElementById('rotationSlider');
-        const playBtn = document.getElementById('playBtn');
+        const roofToggle = document.getElementById('roofToggle');
         datePicker.valueAsDate = currentDate;
 
-        // Kaart initialiseren
-        const map = L.map('map').setView([lat, lng], 19);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap',
-            maxZoom: 22
-        }).addTo(map);
+        const map = L.map('map', {zoomControl: true}).setView([lat, lng], 19);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
 
-        // Laag voor de simulatie-elementen (kamer + licht)
         let simulationLayer = L.featureGroup().addTo(map);
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
 
-        // --- Event Listeners ---
         function onLocationChange(e) {
             const pos = e.latlng || e.target.getLatLng();
             lat = pos.lat; lng = pos.lng;
@@ -126,89 +94,119 @@
             updateSimulation();
         };
 
-        timeSlider.addEventListener('mousedown', () => { if (isPlaying) togglePlay(); });
-
-        datePicker.onchange = function() {
-            let d = new Date(this.value);
-            currentDate.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
-            updateSimulation();
-        };
-
         rotationSlider.oninput = function() {
             roomRotation = parseInt(this.value);
             document.getElementById('rotationVal').textContent = roomRotation;
             updateSimulation();
         };
 
-        // --- Hulpfunctie: Meters naar GPS-punten ---
         function getPoint(x, y) {
-            // Roteer de coördinaten rond het middelpunt op basis van kamer-oriëntatie
             let rad = roomRotation * Math.PI / 180;
             let rx = x * Math.cos(rad) + y * Math.sin(rad);
             let ry = -x * Math.sin(rad) + y * Math.cos(rad);
-
             let dLat = (ry / earthRadius) * (180 / Math.PI);
             let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
             return [lat + dLat, lng + dLng];
         }
 
-        // --- Hoofdfunctie: Teken alles op de kaart ---
         function updateSimulation() {
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
             let azimuthDeg = (sunPos.azimuth * 180 / Math.PI) + 180;
             let altitudeDeg = sunPos.altitude * 180 / Math.PI;
+            let altitudeRad = sunPos.altitude;
 
-            document.getElementById('sunInfo').innerHTML = 
-                `Zon: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}° | Coördinaten: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            document.getElementById('sunInfo').innerHTML = `Zonrichting: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}°`;
 
             simulationLayer.clearLayers();
 
-            // Afmetingen kamer in meters
-            let s = 6; // Halve kamer (totaal 12m x 12m)
-            let w = 2.5; // Halve breedte raam
+            let s = 5;      // Halve kamer (10x10m)
+            let w = 2.5;    // Halve breedte raam
+            let tD = 4;     // Diepte terras (4m)
+            let h = 2.6;    // Hoogte van het dak/verdiep erboven
 
-            // 1. Teken de Vloer
-            let floorCoords = [getPoint(-s, s), getPoint(s, s), getPoint(s, -s), getPoint(-s, -s)];
-            L.polygon(floorCoords, {
-                color: '#2c3e50', weight: 2, fillColor: '#ffffff', fillOpacity: 0.7
+            // 1. Teken het Appartement (Vloer)
+            L.polygon([getPoint(-s, s), getPoint(s, s), getPoint(s, -s), getPoint(-s, -s)], {
+                color: '#2c3e50', weight: 2, fillColor: '#fff', fillOpacity: 0.8
             }).addTo(simulationLayer);
 
-            // 2. Teken het Licht
+            // 2. Teken het Terras (Vloer)
+            // Het terras ligt aan de kant van het raam (y = s tot s + tD)
+            let terraceCoords = [getPoint(-s, s), getPoint(s, s), getPoint(s, s + tD), getPoint(-s, s + tD)];
+            L.polygon(terraceCoords, {
+                color: '#7f8c8d', weight: 1, fillColor: '#bdc3c7', fillOpacity: 0.6
+            }).addTo(simulationLayer);
+
+            // 3. Teken het Raam
+            L.polyline([getPoint(-w, s), getPoint(w, s)], { color: '#3498db', weight: 6 }).addTo(simulationLayer);
+
+            // 4. Zonlicht berekening
             if (altitudeDeg > 0) {
                 let relAzimuth = azimuthDeg - roomRotation;
                 let rad = relAzimuth * Math.PI / 180;
                 let vx = -Math.sin(rad);
                 let vy = Math.cos(rad);
 
+                // Licht op het terras
+                // Als vy > -0.2 (zon schijnt richting het terras)
+                let lightLenTerrace = (90 - altitudeDeg) * 0.5; 
+                
+                // Schaduw van het dak boven het terras
+                let shadowDepth = 0;
+                if (roofToggle.checked) {
+                    // Wiskunde: shadowDepth = hoogte / tan(zonshoogte)
+                    shadowDepth = h / Math.tan(altitudeRad);
+                }
+
+                // Teken lichtvlek op terras (rekening houdend met dak-schaduw)
+                if (vy > -0.5) {
+                    // We berekenen de verlichte zone op het terras
+                    // De zon moet 'over' de rand van het dak schijnen
+                    let startY = s + Math.min(tD, shadowDepth); 
+                    if (startY < s + tD) {
+                        let terraceLight = [
+                            getPoint(-s, startY),
+                            getPoint(s, startY),
+                            getPoint(s, s + tD),
+                            getPoint(-s, s + tD)
+                        ];
+                        L.polygon(terraceLight, { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.4 }).addTo(simulationLayer);
+                    }
+                }
+
+                // Licht binnen in de kamer (door het raam)
                 if (vy > 0) {
-                    let lightLen = Math.max(0, (90 - altitudeDeg) * 0.4); // Factor voor schaduwlengte
-                    let lightCoords = [
-                        getPoint(-w, s), 
-                        getPoint(w, s),
-                        getPoint(w + (vx * lightLen), s - (vy * lightLen)),
-                        getPoint(-w + (vx * lightLen), s - (vy * lightLen))
-                    ];
-                    L.polygon(lightCoords, {
-                        stroke: false, fillColor: '#f1c40f', fillOpacity: 0.6
-                    }).addTo(simulationLayer);
+                    // Als er een dak is, blokkeert dat ook licht naar binnen als de zon hoog staat
+                    let roomLightStart = s;
+                    let roomLightDepth = Math.max(0, (90 - altitudeDeg) * 0.4);
+                    
+                    // Correctie voor oversteek/dak:
+                    if (roofToggle.checked) {
+                        // Als de schaduw van het dak het raam bereikt (shadowDepth > tD)
+                        // Dan pas schijnt er licht naar binnen.
+                        roomLightDepth = Math.max(0, roomLightDepth - (shadowDepth - tD));
+                    }
+
+                    if (roomLightDepth > 0) {
+                        let roomLight = [
+                            getPoint(-w, s), getPoint(w, s),
+                            getPoint(w + (vx * roomLightDepth), s - (vy * roomLightDepth)),
+                            getPoint(-w + (vx * roomLightDepth), s - (vy * roomLightDepth))
+                        ];
+                        L.polygon(roomLight, { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.6 }).addTo(simulationLayer);
+                    }
                 }
             }
-
-            // 3. Teken het Raam (blauw accent)
-            let windowCoords = [getPoint(-w, s), getPoint(w, s)];
-            L.polyline(windowCoords, { color: '#3498db', weight: 5, opacity: 1 }).addTo(simulationLayer);
         }
 
-        // --- Animatie ---
+        // --- Animatie & Seizoenen ---
         let isPlaying = false, animationInterval;
         function togglePlay() {
             isPlaying = !isPlaying;
             if (isPlaying) {
                 playBtn.innerHTML = '⏸ Pauze'; playBtn.classList.add('playing');
                 animationInterval = setInterval(() => {
-                    let v = (parseInt(timeSlider.value) + 4) % 1440;
-                    timeSlider.value = v;
-                    timeSlider.oninput();
+                    let v = (parseInt(timeSlider.value) + 5) % 1440;
+                    timeSlider.value = v; timeSlider.oninput();
                 }, 50);
             } else {
                 playBtn.innerHTML = '▶ Play'; playBtn.classList.remove('playing');
@@ -217,8 +215,8 @@
         }
 
         function setSeason(s) {
-            let y = new Date().getFullYear();
-            if(s === 'zomer') currentDate = new Date(y, 5, 21, 12, 0);
+            let y = 2026;
+            if(s === 'zomer') currentDate = new Date(y, 5, 21, 13, 0);
             if(s === 'winter') currentDate = new Date(y, 11, 21, 12, 0);
             if(s === 'nu') currentDate = new Date();
             datePicker.valueAsDate = currentDate;
@@ -226,7 +224,6 @@
             timeSlider.oninput();
         }
 
-        // Start de simulatie
         updateSimulation();
     </script>
 </body>
