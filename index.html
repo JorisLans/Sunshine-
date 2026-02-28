@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Met Animatie</title>
+    <title>Zonlicht Simulator - Map Overlay & Animatie</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -34,11 +34,11 @@
 
     <div class="container">
         <div class="panel">
-            <h3>1. Locatie op de kaart</h3>
+            <h3>1. Simulatie op de kaart</h3>
             <div id="map"></div>
         </div>
 
-        <div class="panel">
+        <div class="panel" id="canvas-panel">
             <h3>2. Simulatie (Bovenaanzicht)</h3>
             <div id="canvas-container">
                 <canvas id="roomCanvas" width="400" height="400"></canvas>
@@ -74,13 +74,11 @@
     </div>
 
     <script>
-        // Standaard startwaarden
         let lat = 51.0289; 
         let lng = 3.0142; 
         let currentDate = new Date();
         let roomRotation = 180;
 
-        // DOM Elementen ophalen
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         const rotationSlider = document.getElementById('rotationSlider');
@@ -88,15 +86,17 @@
         const playBtn = document.getElementById('playBtn');
         const ctx = canvas.getContext('2d');
 
-        // Initialiseer datumveld
         datePicker.valueAsDate = currentDate;
 
-        // Leaflet Kaart Initialisatie
-        const map = L.map('map').setView([lat, lng], 13);
+        // Leaflet Kaart Initialisatie (Dichtbij ingezoomd: zoomniveau 19)
+        const map = L.map('map').setView([lat, lng], 19);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+            attribution: '© OpenStreetMap',
+            maxZoom: 21
         }).addTo(map);
 
+        // Laag voor de getekende kamer op de kaart
+        let mapSimulationLayer = L.featureGroup().addTo(map);
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
 
         function onLocationChange(e) {
@@ -110,7 +110,6 @@
         map.on('click', onLocationChange);
         marker.on('dragend', onLocationChange);
 
-        // UI Events
         function updateTimeFromSlider() {
             currentDate.setHours(Math.floor(timeSlider.value / 60), timeSlider.value % 60);
             document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -118,14 +117,8 @@
         }
 
         timeSlider.oninput = updateTimeFromSlider;
-
-        // Stop animatie als gebruiker zelf de slider aanraakt
-        timeSlider.addEventListener('mousedown', () => {
-            if (isPlaying) togglePlay();
-        });
-        timeSlider.addEventListener('touchstart', () => {
-            if (isPlaying) togglePlay();
-        });
+        timeSlider.addEventListener('mousedown', () => { if (isPlaying) togglePlay(); });
+        timeSlider.addEventListener('touchstart', () => { if (isPlaying) togglePlay(); });
 
         datePicker.onchange = function() {
             let d = new Date(this.value);
@@ -153,7 +146,6 @@
             updateSimulation();
         }
 
-        // --- Animatie Logica ---
         let isPlaying = false;
         let animationInterval;
 
@@ -162,11 +154,10 @@
             if (isPlaying) {
                 playBtn.innerHTML = '⏸ Pauze';
                 playBtn.classList.add('playing');
-                // Voeg elke 40 milliseconden 3 virtuele minuten toe voor een vlotte animatie
                 animationInterval = setInterval(() => {
                     let currentVal = parseInt(timeSlider.value);
                     currentVal += 3;
-                    if (currentVal >= 1439) currentVal = 0; // Herstart de dag om middernacht
+                    if (currentVal >= 1439) currentVal = 0;
                     timeSlider.value = currentVal;
                     updateTimeFromSlider();
                 }, 40);
@@ -177,14 +168,68 @@
             }
         }
 
-        // --- Simulatie Renderen ---
+        // --- Helper functie om meters om te zetten naar GPS coördinaten ---
+        function getMapLatLng(x, y) {
+            // Roteer de x/y coördinaten (in meters) rond de oorsprong
+            let rad = roomRotation * Math.PI / 180;
+            let rx = x * Math.cos(rad) + y * Math.sin(rad);
+            let ry = -x * Math.sin(rad) + y * Math.cos(rad);
+
+            // Zet de geroteerde meters om naar een verschil in lengte- en breedtegraad
+            let earthRadius = 6378137;
+            let dLat = (ry / earthRadius) * (180 / Math.PI);
+            let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
+
+            return [lat + dLat, lng + dLng];
+        }
+
+        // --- Hoofd render functie ---
         function updateSimulation() {
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
             let azimuthDeg = (sunPos.azimuth * 180 / Math.PI) + 180;
             let altitudeDeg = sunPos.altitude * 180 / Math.PI;
 
-            document.getElementById('sunInfo').innerHTML = `Zonrichting: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}° | Locatie: ${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+            document.getElementById('sunInfo').innerHTML = `Zonrichting: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}° | Locatie: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
+            // ==========================================
+            // DEEL 1: TEKEN OP DE INTERACTIEVE KAART
+            // ==========================================
+            mapSimulationLayer.clearLayers();
+
+            let s = 10; // Halve grootte van de kamer in meters (dus 20x20 meter in totaal)
+            let w = 4;  // Halve breedte van het raam in meters
+
+            // Kamer Vloer
+            let floorPts = [ getMapLatLng(-s, s), getMapLatLng(s, s), getMapLatLng(s, -s), getMapLatLng(-s, -s) ];
+            L.polygon(floorPts, {color: '#2c3e50', weight: 3, fillColor: '#f9f9f9', fillOpacity: 0.8}).addTo(mapSimulationLayer);
+
+            // Zonlicht op de kaart
+            if (altitudeDeg > 0) {
+                let relAzimuth = azimuthDeg - roomRotation;
+                let rad = relAzimuth * Math.PI / 180;
+                let vx = -Math.sin(rad); 
+                let vy = Math.cos(rad);
+
+                if (vy > 0) {
+                    let lightLen = Math.max(0, (90 - altitudeDeg) * 0.5); // Lengte van de zonnestraal op de kaart
+                    let lightPts = [
+                        getMapLatLng(-w, s), // Links raam
+                        getMapLatLng(w, s),  // Rechts raam
+                        getMapLatLng(w + (vx * lightLen), s - (vy * lightLen)), // Rechts einde straal
+                        getMapLatLng(-w + (vx * lightLen), s - (vy * lightLen)) // Links einde straal
+                    ];
+                    L.polygon(lightPts, {stroke: false, fillColor: '#ffe600', fillOpacity: 0.5}).addTo(mapSimulationLayer);
+                }
+            }
+
+            // Raam lijn
+            let windowPts = [ getMapLatLng(-w, s), getMapLatLng(w, s) ];
+            L.polyline(windowPts, {color: '#3498db', weight: 6}).addTo(mapSimulationLayer);
+
+
+            // ==========================================
+            // DEEL 2: TEKEN OP HET 2D CANVAS (Rechterkant)
+            // ==========================================
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             let cx = 200, cy = 200, size = 160, win = 70;
 
@@ -202,21 +247,17 @@
             if (altitudeDeg > 0) {
                 let relAzimuth = azimuthDeg - roomRotation;
                 let rad = relAzimuth * Math.PI / 180;
-                
                 let vx = -Math.sin(rad); 
                 let vy = Math.cos(rad);
 
                 if (vy > 0) {
                     let lightLen = Math.max(0, (90 - altitudeDeg) * 4);
-                    
                     ctx.beginPath();
                     ctx.moveTo(-win/2, -size/2);
                     ctx.lineTo(win/2, -size/2);
-                    
                     ctx.lineTo(win/2 + (vx * lightLen), -size/2 + (vy * lightLen));
                     ctx.lineTo(-win/2 + (vx * lightLen), -size/2 + (vy * lightLen));
                     ctx.closePath();
-                    
                     ctx.fillStyle = "rgba(255, 230, 0, 0.4)";
                     ctx.fill();
                 }
@@ -238,5 +279,4 @@
         updateSimulation();
     </script>
 </body>
-  </html>
-  
+</html>
