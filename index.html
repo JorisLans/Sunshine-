@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Stabiel + Klok</title>
+    <title>Zonlicht Simulator</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,31 +13,108 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #050505; }
-        .main-container { display: flex; flex: 1; min-height: 0; gap: 4px; padding: 4px; }
-        #map { flex: 1; border-radius: 8px; border: 1px solid #333; }
-        #viewer3d { flex: 1; background: #000; position: relative; border-radius: 8px; border: 1px solid #333; }
-        .controls { 
-            background: #ffffff; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.8); 
-            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; z-index: 100;
+        /* Base Styling */
+        body { 
+            font-family: 'Inter', sans-serif; margin: 0; padding: 0; 
+            height: 100vh; display: flex; flex-direction: column; 
+            overflow: hidden; background: #0f172a; color: #334155; 
         }
-        .control-group { display: flex; flex-direction: column; gap: 8px; }
+        
+        /* Layout Containers */
+        .main-container { 
+            display: flex; flex: 1; min-height: 0; gap: 16px; padding: 16px; 
+        }
+        #map { 
+            flex: 1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 1; 
+        }
+        #viewer3d { 
+            flex: 1; background: #020205; position: relative; border-radius: 12px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); overflow: hidden; 
+        }
+
+        /* Control Panel */
+        .controls { 
+            background: #ffffff; padding: 24px 32px; 
+            box-shadow: 0 -10px 25px rgba(0,0,0,0.1); 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 32px; z-index: 100;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 12px; }
         .time-header { display: flex; justify-content: space-between; align-items: center; }
-        label { font-weight: bold; font-size: 14px; color: #333; }
-        input[type="range"] { width: 100%; cursor: pointer; }
-        .buttons { display: flex; gap: 8px; }
-        button { flex: 1; padding: 10px; border: none; background: #2c3e50; color: white; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
-        #playBtn { flex: 0 0 100px; background: #f39c12; color: #000; }
-        #playBtn.playing { background: #e74c3c; color: #fff; }
-        .options-box { display: flex; gap: 15px; background: #f0f2f5; padding: 12px; border-radius: 8px; border: 1px solid #ccc; }
         
-        .info-overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.9); color: #fff; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; z-index: 10; }
+        /* Typography */
+        label { font-weight: 600; font-size: 13px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
+        span.val-text { font-weight: 700; color: #0f172a; font-size: 15px; }
+        .footer-note { font-size: 12px; color: #94a3b8; margin: 0; margin-top: auto; }
+
+        /* Custom Sliders */
+        input[type="range"] { 
+            -webkit-appearance: none; width: 100%; height: 6px; 
+            background: #e2e8f0; border-radius: 4px; outline: none; margin: 10px 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; border-radius: 50%; 
+            background: #3b82f6; cursor: pointer; transition: 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { background: #2563eb; transform: scale(1.1); }
+
+        /* Custom Inputs */
+        input[type="date"] {
+            padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+            font-family: 'Inter', sans-serif; font-size: 14px; color: #0f172a; outline: none;
+        }
+        input[type="date"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+        /* Buttons */
+        .buttons { display: flex; gap: 12px; }
+        button { 
+            flex: 1; padding: 10px; border: none; background: #f1f5f9; color: #475569; 
+            border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+            transition: all 0.2s ease; border: 1px solid #e2e8f0;
+        }
+        button:hover { background: #e2e8f0; color: #0f172a; }
         
-        /* CSS voor de 3D Klok */
+        #playBtn { 
+            flex: 0 0 110px; background: #3b82f6; color: #fff; border: none; 
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+        #playBtn:hover { background: #2563eb; }
+        #playBtn.playing { background: #ef4444; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3); }
+        #playBtn.playing:hover { background: #dc2626; }
+
+        /* Options Box */
+        .options-box { 
+            display: flex; gap: 24px; background: #f8fafc; padding: 16px; 
+            border-radius: 8px; border: 1px solid #e2e8f0; align-items: center;
+        }
+        .options-box label { 
+            display: flex; align-items: center; gap: 8px; font-size: 13px; 
+            color: #334155; text-transform: none; cursor: pointer; font-weight: 500;
+        }
+        .options-box input[type="checkbox"] {
+            width: 16px; height: 16px; cursor: pointer; accent-color: #3b82f6;
+        }
+        
+        /* Glassmorphism Overlays in 3D View */
+        .info-overlay { 
+            position: absolute; top: 16px; left: 16px; 
+            background: rgba(15, 23, 42, 0.75); color: #f8fafc; 
+            padding: 14px 18px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+            pointer-events: none; border-left: 4px solid #f59e0b; z-index: 10;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-weight: 400;
+        }
+        .info-overlay strong { color: #cbd5e1; font-weight: 600; }
+        
         .time-overlay3d {
-            position: absolute; top: 15px; right: 15px; background: rgba(255, 255, 255, 0.1); color: #fff;
-            padding: 10px 20px; border-radius: 8px; font-size: 32px; font-weight: bold; pointer-events: none;
-            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 10;
+            position: absolute; top: 16px; right: 16px; 
+            background: rgba(255, 255, 255, 0.1); color: #ffffff;
+            padding: 12px 24px; border-radius: 10px; font-size: 36px; font-weight: 700; 
+            pointer-events: none; z-index: 10;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); letter-spacing: -1px;
         }
     </style>
 </head>
@@ -43,6 +122,7 @@
 
     <div class="main-container">
         <div id="map"></div>
+        
         <div id="viewer3d">
             <div class="info-overlay" id="sunInfo">Laden...</div>
             <div class="time-overlay3d" id="timeOverlay3D">12:00</div>
@@ -52,13 +132,15 @@
     <div class="controls">
         <div class="control-group">
             <div class="time-header">
-                <label>Tijd: <span id="timeVal">12:00</span></label>
+                <label>Tijd: <span class="val-text" id="timeVal">12:00</span></label>
                 <button id="playBtn" onclick="togglePlay()">▶ Play</button>
             </div>
             <input type="range" id="timeSlider" min="0" max="1439" value="720">
-            <label>Datum:</label>
+            
+            <label style="margin-top: 4px;">Datum</label>
             <input type="date" id="datePicker">
-            <div class="buttons">
+            
+            <div class="buttons" style="margin-top: 4px;">
                 <button onclick="setSeason('zomer')">Zomer</button>
                 <button onclick="setSeason('winter')">Winter</button>
                 <button onclick="setSeason('nu')">Nu</button>
@@ -66,13 +148,16 @@
         </div>
 
         <div class="control-group">
-            <label>Draai Appartement: <span id="rotationVal">180</span>°</label>
+            <label>Oriëntatie Appartement: <span class="val-text" id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
+            
+            <label style="margin-top: 4px;">Architectuur</label>
             <div class="options-box">
                 <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Plafond/Dak</label>
                 <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;">De 3D-klok is toegevoegd (rechtsboven in het zwarte scherm).</p>
+            
+            <p class="footer-note">Zonlicht Simulator © 2026</p>
         </div>
     </div>
 
@@ -212,7 +297,6 @@
 
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
 
-            // Klok in de 3D weergave updaten
             document.getElementById('timeOverlay3D').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
             // 2D Sync
@@ -232,6 +316,7 @@
             L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], {color:'#3498db', weight:4}).addTo(mapSimulationLayer);
 
             document.getElementById('sunInfo').innerHTML = 
+                `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
                 `<strong>Hoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°<br>` +
                 `<strong>Status:</strong> ${altitude > 0 ? 'Gouden zon' : 'Nacht'}`;
         }
@@ -271,12 +356,14 @@
             isPlaying = !isPlaying;
             if (isPlaying) {
                 document.getElementById('playBtn').innerHTML = '⏸ Pauze';
+                document.getElementById('playBtn').classList.add('playing');
                 animationInterval = setInterval(() => {
                     timeSlider.value = (parseInt(timeSlider.value) + 5) % 1440;
                     timeSlider.oninput();
                 }, 50);
             } else {
                 document.getElementById('playBtn').innerHTML = '▶ Play';
+                document.getElementById('playBtn').classList.remove('playing');
                 clearInterval(animationInterval);
             }
         }
