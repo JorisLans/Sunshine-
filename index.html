@@ -3,18 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Gecorrigeerde Logica</title>
+    <title>3D Zonlicht Simulator - Appartement</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        #map { flex: 1; width: 100%; z-index: 1; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #222; }
+        
+        .main-container { display: flex; flex: 1; min-height: 0; gap: 2px; }
+        #map { flex: 1; background: #eee; }
+        #viewer3d { flex: 1; background: #000; position: relative; }
+
         .controls { 
-            background: white; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.2); 
-            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; z-index: 10; 
+            background: white; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; z-index: 100;
         }
-        .control-group { display: flex; flex-direction: column; gap: 10px; }
+        .control-group { display: flex; flex-direction: column; gap: 8px; }
         .time-header { display: flex; justify-content: space-between; align-items: center; }
         label { font-weight: bold; font-size: 14px; color: #333; }
         input[type="range"] { width: 100%; cursor: pointer; }
@@ -22,14 +29,18 @@
         button { flex: 1; padding: 10px; border: none; background: #4A90E2; color: white; border-radius: 6px; cursor: pointer; font-size: 13px; }
         #playBtn { flex: 0 0 100px; background: #2ecc71; font-weight: bold; }
         #playBtn.playing { background: #e74c3c; }
-        .options-box { display: flex; flex-direction: column; gap: 8px; background: #f8f9fa; padding: 12px; border-radius: 8px; border: 1px solid #e1e4e8; }
-        .checkbox-item { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; }
-        .info { grid-column: span 2; font-size: 12px; color: #555; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
+        .options-box { display: flex; gap: 15px; background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
+        .info-overlay { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); color: white; padding: 10px; border-radius: 5px; font-size: 12px; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="map"></div>
+    <div class="main-container">
+        <div id="map"></div>
+        <div id="viewer3d">
+            <div class="info-overlay" id="sunInfo">3D View: Gebruik muis om te draaien</div>
+        </div>
+    </div>
 
     <div class="controls">
         <div class="control-group">
@@ -50,51 +61,152 @@
         </div>
 
         <div class="control-group">
-            <label>Oriëntatie Terras: <span id="rotationVal">180</span>°</label>
+            <label>Oriëntatie: <span id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
             
             <div class="options-box">
-                <label class="checkbox-item">
-                    <input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> 
-                    Terras is overdekt (verdiep erboven)
-                </label>
-                <label class="checkbox-item">
-                    <input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> 
-                    Zijmuren aanwezig (Loggia)
-                </label>
+                <label><input type="checkbox" id="roofToggle" checked onchange="update3DModel()"> Dak</label>
+                <label><input type="checkbox" id="wallsToggle" checked onchange="update3DModel()"> Zijmuren</label>
             </div>
+            <p style="font-size: 11px; color: #666; margin: 0;">In de 3D view: Linkermuis = draaien, Rechtermuis = schuiven, Scroll = zoomen.</p>
         </div>
-
-        <div class="info" id="sunInfo">De blauwe lijn is het raam, het grijze vlak is het terras.</div>
     </div>
 
     <script>
         let lat = 51.0289, lng = 3.0142, currentDate = new Date(), roomRotation = 180;
-        const earthRadius = 6378137;
-
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         const rotationSlider = document.getElementById('rotationSlider');
-        const roofToggle = document.getElementById('roofToggle');
-        const wallsToggle = document.getElementById('wallsToggle');
         datePicker.valueAsDate = currentDate;
 
-        const map = L.map('map').setView([lat, lng], 20);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
-
-        let simulationLayer = L.featureGroup().addTo(map);
+        // --- MAP INITIALIZATION ---
+        const map = L.map('map').setView([lat, lng], 19);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
-
-        function onLocationChange(e) {
-            const pos = e.latlng || e.target.getLatLng();
-            lat = pos.lat; lng = pos.lng;
-            marker.setLatLng([lat, lng]);
+        marker.on('drag', function(e) {
+            lat = e.target.getLatLng().lat;
+            lng = e.target.getLatLng().lng;
             updateSimulation();
+        });
+
+        // --- THREE.JS INITIALIZATION ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // Sky blue
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / 2 / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('viewer3d').appendChild(renderer.domElement);
+
+        const controls3d = new THREE.OrbitControls(camera, renderer.domElement);
+        camera.position.set(15, 15, 15);
+        controls3d.update();
+
+        // Verlichting
+        const ambientLight = new THREE.AmbientLight(0x404040, 1); // Zacht basislicht
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 50;
+        sunLight.shadow.camera.left = -20;
+        sunLight.shadow.camera.right = 20;
+        sunLight.shadow.camera.top = 20;
+        sunLight.shadow.camera.bottom = -20;
+        scene.add(sunLight);
+
+        // --- HULPFUNCTIES 3D MODEL ---
+        let modelGroup = new THREE.Group();
+        scene.add(modelGroup);
+
+        function update3DModel() {
+            modelGroup.clear();
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
+            const terraceMat = new THREE.MeshStandardMaterial({ color: 0x999999 });
+
+            // Vloer Kamer (10x10)
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10), floorMat);
+            floor.receiveShadow = true;
+            modelGroup.add(floor);
+
+            // Vloer Terras (10x4)
+            const terrace = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 4), terraceMat);
+            terrace.position.set(0, 0, 7);
+            terrace.receiveShadow = true;
+            modelGroup.add(terrace);
+
+            // Muren Kamer
+            const createWall = (w, h, d, x, y, z) => {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+                wall.position.set(x, y, z);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                modelGroup.add(wall);
+            };
+
+            createWall(10, 3, 0.2, 0, 1.5, -5); // Achtermuur
+            createWall(0.2, 3, 10, -5, 1.5, 0); // Linkermuur
+            createWall(0.2, 3, 10, 5, 1.5, 0);  // Rechtermuur
+            
+            // Voormuur met raam (twee delen)
+            createWall(2.5, 3, 0.2, -3.75, 1.5, 5); 
+            createWall(2.5, 3, 0.2, 3.75, 1.5, 5);
+            createWall(5, 0.5, 0.2, 0, 2.75, 5); // Bovenbalk raam
+            createWall(5, 0.5, 0.2, 0, 0.25, 5); // Onderbalk raam
+
+            // Optionele Zijmuren Terras
+            if (document.getElementById('wallsToggle').checked) {
+                createWall(0.2, 3, 4, -5, 1.5, 7); 
+                createWall(0.2, 3, 4, 5, 1.5, 7);
+            }
+
+            // Optioneel Dak Terras
+            if (document.getElementById('roofToggle').checked) {
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 4), wallMat);
+                roof.position.set(0, 3, 7);
+                roof.castShadow = true;
+                modelGroup.add(roof);
+                
+                // Dak van de kamer zelf
+                const roomRoof = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 10), wallMat);
+                roomRoof.position.set(0, 3, 0);
+                roomRoof.castShadow = true;
+                modelGroup.add(roomRoof);
+            }
+
+            modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
         }
 
-        map.on('click', onLocationChange);
-        marker.on('drag', onLocationChange);
+        // --- SIMULATIE LOGICA ---
+        function updateSimulation() {
+            let sunPos = SunCalc.getPosition(currentDate, lat, lng);
+            let azimuth = sunPos.azimuth; // SunCalc 0 = Zuid
+            let altitude = sunPos.altitude;
 
+            // Update Zonlicht Positie
+            const dist = 30;
+            sunLight.position.set(
+                dist * Math.sin(azimuth) * Math.cos(altitude),
+                dist * Math.sin(altitude),
+                dist * Math.cos(azimuth) * Math.cos(altitude)
+            );
+
+            // Verander lucht kleur op basis van zonhoogte
+            let skyIntensity = Math.max(0, Math.min(1, altitude * 2));
+            scene.background = new THREE.Color().setHSL(0.6, 0.5, skyIntensity * 0.5 + 0.1);
+            ambientLight.intensity = skyIntensity * 0.8 + 0.2;
+
+            document.getElementById('sunInfo').innerHTML = 
+                `Hoogte: ${(altitude * 180 / Math.PI).toFixed(1)}° | Azimuth: ${(azimuth * 180 / Math.PI + 180).toFixed(1)}°`;
+
+            modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
+        }
+
+        // UI Handlers
         timeSlider.oninput = function() {
             currentDate.setHours(Math.floor(this.value / 60), this.value % 60);
             document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -107,119 +219,11 @@
             updateSimulation();
         };
 
-        function getPoint(x, y) {
-            let rad = roomRotation * Math.PI / 180;
-            let rx = x * Math.cos(rad) + y * Math.sin(rad);
-            let ry = -x * Math.sin(rad) + y * Math.cos(rad);
-            let dLat = (ry / earthRadius) * (180 / Math.PI);
-            let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
-            return [lat + dLat, lng + dLng];
-        }
-
-        function updateSimulation() {
-            let sunPos = SunCalc.getPosition(currentDate, lat, lng);
-            let azimuthDeg = (sunPos.azimuth * 180 / Math.PI) + 180;
-            let altitudeRad = sunPos.altitude;
-            let altitudeDeg = altitudeRad * 180 / Math.PI;
-
-            document.getElementById('sunInfo').innerHTML = `Zon: ${azimuthDeg.toFixed(1)}° | Hoogte: ${altitudeDeg.toFixed(1)}°`;
-
-            simulationLayer.clearLayers();
-
-            let s = 5;      // Kamer half-breedte
-            let w = 2.5;    // Raam half-breedte
-            let tD = 4;     // Terras diepte
-            let h = 2.7;    // Plafondhoogte
-
-            // 1. Basis: Kamer en Terras vloer
-            L.polygon([getPoint(-s, s), getPoint(s, s), getPoint(s, -s), getPoint(-s, -s)], {
-                color: '#2c3e50', weight: 2, fillColor: '#fff', fillOpacity: 0.8
-            }).addTo(simulationLayer);
-            
-            L.polygon([getPoint(-s, s), getPoint(s, s), getPoint(s, s+tD), getPoint(-s, s+tD)], {
-                color: '#7f8c8d', weight: 1, fillColor: '#bdc3c7', fillOpacity: 0.6
-            }).addTo(simulationLayer);
-
-            // 2. Muren en Ramen
-            L.polyline([getPoint(-w, s), getPoint(w, s)], { color: '#3498db', weight: 6 }).addTo(simulationLayer);
-            if (wallsToggle.checked) {
-                L.polyline([getPoint(-s, s), getPoint(-s, s+tD)], { color: '#2c3e50', weight: 4 }).addTo(simulationLayer);
-                L.polyline([getPoint(s, s), getPoint(s, s+tD)], { color: '#2c3e50', weight: 4 }).addTo(simulationLayer);
-            }
-
-            // 3. De Licht-Logica
-            if (altitudeDeg > 0) {
-                let relAzimuth = azimuthDeg - roomRotation;
-                let rad = relAzimuth * Math.PI / 180;
-                let vx = -Math.sin(rad);
-                let vy = Math.cos(rad);
-
-                if (vy > -0.5) { // Zon komt van de voorkant
-                    // Schaduw van de dakrand valt naar binnen
-                    // De dakrand bevindt zich op y = s + tD
-                    let shadowL = h / Math.tan(altitudeRad);
-                    let shadowBoundaryY = (s + tD) - shadowL;
-
-                    // Waar begint en eindigt het licht op de y-as?
-                    let lightStart = Math.max(s - 10, shadowBoundaryY); // Licht kan kamer in gaan
-                    let lightEnd = s + tD; // Licht stopt aan de rand van het terras
-
-                    if (lightEnd > lightStart) {
-                        // Bereken zijwaartse schaduw van muren (vx)
-                        let xL = -s, xR = s;
-                        if (wallsToggle.checked) {
-                            // De schaduw van een muur op afstand d is d * tan(relAzimuth)
-                            // Maar makkelijker: gebruik de vx/vy verhouding
-                            let wallShadowOffset = shadowL * vx;
-                            if (vx > 0) xL = Math.max(-s, -s + wallShadowOffset);
-                            if (vx < 0) xR = Math.min(s, s + wallShadowOffset);
-                        }
-
-                        // Teken Licht op Terras
-                        let terraceLightYStart = Math.max(s, lightStart);
-                        if (terraceLightYStart < lightEnd) {
-                            L.polygon([
-                                getPoint(xL, terraceLightYStart), getPoint(xR, terraceLightYStart),
-                                getPoint(xR, lightEnd), getPoint(xL, lightEnd)
-                            ], { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.4 }).addTo(simulationLayer);
-                        }
-
-                        // Teken Licht in Kamer (door het raam)
-                        if (lightStart < s) {
-                            let roomLightEnd = s;
-                            let roomLightStart = lightStart;
-                            
-                            // Beperk breedte tot raambreedte
-                            let rxL = Math.max(-w, xL);
-                            let rxR = Math.min(w, xR);
-
-                            if (rxR > rxL) {
-                                L.polygon([
-                                    getPoint(rxL, roomLightStart), getPoint(rxR, roomLightStart),
-                                    getPoint(rxR, roomLightEnd), getPoint(rxL, roomLightEnd)
-                                ], { stroke: false, fillColor: '#f1c40f', fillOpacity: 0.6 }).addTo(simulationLayer);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- Rest van de functies (Play/Seizoenen) blijven hetzelfde ---
-        let isPlaying = false, animationInterval;
-        function togglePlay() {
-            isPlaying = !isPlaying;
-            if (isPlaying) {
-                playBtn.innerHTML = '⏸ Pauze'; playBtn.classList.add('playing');
-                animationInterval = setInterval(() => {
-                    let v = (parseInt(timeSlider.value) + 5) % 1440;
-                    timeSlider.value = v; timeSlider.oninput();
-                }, 50);
-            } else {
-                playBtn.innerHTML = '▶ Play'; playBtn.classList.remove('playing');
-                clearInterval(animationInterval);
-            }
-        }
+        datePicker.onchange = function() {
+            let d = new Date(this.value);
+            currentDate.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+            updateSimulation();
+        };
 
         function setSeason(s) {
             let y = 2026;
@@ -231,7 +235,37 @@
             timeSlider.oninput();
         }
 
+        let isPlaying = false, animationInterval;
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playBtn.innerHTML = '⏸ Pauze'; playBtn.classList.add('playing');
+                animationInterval = setInterval(() => {
+                    timeSlider.value = (parseInt(timeSlider.value) + 5) % 1440;
+                    timeSlider.oninput();
+                }, 50);
+            } else {
+                playBtn.innerHTML = '▶ Play'; playBtn.classList.remove('playing');
+                clearInterval(animationInterval);
+            }
+        }
+
+        // Render Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.setSize(document.getElementById('viewer3d').clientWidth, document.getElementById('viewer3d').clientHeight);
+            renderer.render(scene, camera);
+        }
+
+        // Start
+        update3DModel();
         updateSimulation();
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = document.getElementById('viewer3d').clientWidth / document.getElementById('viewer3d').clientHeight;
+            camera.updateProjectionMatrix();
+        });
     </script>
 </body>
 </html>
