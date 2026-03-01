@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Zonlicht Simulator - Crash Fix</title>
+    <title>3D Zonlicht Simulator - Stabiele Versie</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -12,14 +12,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #050505; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #111; }
         
         .main-container { display: flex; flex: 1; min-height: 0; gap: 4px; padding: 4px; }
-        #map { flex: 1; border-radius: 8px; border: 1px solid #333; min-height: 200px; }
-        
-        /* FIX: Canvas krijgt nu een harde positie in de container zodat hij niet kan crashen */
-        #viewer3d { flex: 1; background: #0a0a1a; position: relative; border-radius: 8px; border: 1px solid #333; min-height: 200px; overflow: hidden; }
-        #viewer3d canvas { position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; display: block; outline: none; }
+        #map { flex: 1; border-radius: 8px; border: 1px solid #333; }
+        #viewer3d { flex: 1; background: #050505; position: relative; border-radius: 8px; border: 1px solid #333; overflow: hidden; }
 
         .controls { 
             background: #ffffff; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.8); 
@@ -39,19 +36,13 @@
         .options-box { display: flex; gap: 15px; background: #f0f2f5; padding: 12px; border-radius: 8px; border: 1px solid #ccc; }
         
         .info-overlay { 
-            position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.9); color: #fff; 
+            position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); color: #fff; 
             padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; z-index: 10;
         }
         .time-overlay3d {
-            position: absolute; top: 15px; right: 15px; background: rgba(255, 255, 255, 0.15); color: #fff;
+            position: absolute; top: 15px; right: 15px; background: rgba(255, 255, 255, 0.1); color: #fff;
             padding: 10px 20px; border-radius: 8px; font-size: 32px; font-weight: bold; pointer-events: none;
-            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.3); z-index: 10;
-        }
-
-        @media (max-width: 800px) {
-            .main-container { flex-direction: column; overflow-y: auto; }
-            #map, #viewer3d { flex: none; height: 40vh; }
-            .controls { grid-template-columns: 1fr; max-height: 40vh; overflow-y: auto; }
+            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 10;
         }
     </style>
 </head>
@@ -87,10 +78,10 @@
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
             
             <div class="options-box">
-                <label><input type="checkbox" id="roofToggle" checked onchange="handleModelChange()"> Dak tonen</label>
-                <label><input type="checkbox" id="wallsToggle" checked onchange="handleModelChange()"> Zijmuren</label>
+                <label><input type="checkbox" id="roofToggle" checked onchange="build3DModel(); updateSimulation();"> Dak tonen</label>
+                <label><input type="checkbox" id="wallsToggle" checked onchange="build3DModel(); updateSimulation();"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;"><b>Fix:</b> Rendering-crash opgelost. Basislamp staat feller zodat je altijd iets ziet.</p>
+            <p style="font-size: 11px; color: #555; margin: 0;"><b>Teruggedraaid:</b> De robuuste weergave van 5 versies geleden is hersteld.</p>
         </div>
     </div>
 
@@ -98,13 +89,15 @@
         let lat = 51.0289, lng = 3.0142; 
         const earthRadius = 6378137;
         let roomRotation = 180; 
-
-        // Dimensies van de kamer
         let s = 5, w = 2.5, tD = 4, h = 2.7;
 
         let currentDate = new Date();
+        currentDate.setHours(12, 0, 0, 0);
+
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
+        timeSlider.value = 720;
+        datePicker.valueAsDate = currentDate;
 
         // --- 1. KAART INITIALISATIE ---
         const map = L.map('map').setView([lat, lng], 19);
@@ -123,55 +116,39 @@
         map.on('click', (e) => updateLocation(e.latlng.lat, e.latlng.lng));
         marker.on('drag', (e) => updateLocation(e.target.getLatLng().lat, e.target.getLatLng().lng));
 
-        // --- 2. THREE.JS INITIALISATIE (CRASH FIX) ---
+        // --- 2. THREE.JS INITIALISATIE (TERUGGEDRAAID NAAR WERKENDE METHODE) ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a1a);
-        
-        const viewerDiv = document.getElementById('viewer3d');
-        const camera = new THREE.PerspectiveCamera(45, viewerDiv.clientWidth / viewerDiv.clientHeight, 0.1, 1000);
-        
+        scene.background = new THREE.Color(0x0a0a0a); // Niet pikzwart
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
-        // Forceer grootte 1x direct
-        renderer.setSize(viewerDiv.clientWidth, viewerDiv.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        viewerDiv.appendChild(renderer.domElement);
+        document.getElementById('viewer3d').appendChild(renderer.domElement);
 
         const controls3d = new THREE.OrbitControls(camera, renderer.domElement);
         camera.position.set(18, 15, 18);
         controls3d.update();
 
-        // FIX: Sterker basislicht zodat de app nóóit pikzwart kan zijn
+        // Voldoende basislicht zodat we altijd iets zien
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); 
         scene.add(ambientLight);
 
-        // Helper Grid zodat je altijd de vloer ziet
-        const gridHelper = new THREE.GridHelper(30, 30, 0x444444, 0x222222);
-        gridHelper.position.y = -0.01;
-        scene.add(gridHelper);
-
-        // Gouden Zonlicht
+        // Gouden Zonlicht met veilige, brede schaduw-marges
         const sunLight = new THREE.DirectionalLight(0xfffaed, 2.5);
         sunLight.castShadow = true;
-        sunLight.shadow.camera.left = -30; sunLight.shadow.camera.right = 30;
-        sunLight.shadow.camera.top = 30; sunLight.shadow.camera.bottom = -30;
-        sunLight.shadow.camera.near = 0.1; sunLight.shadow.camera.far = 100;
+        sunLight.shadow.camera.left = -40; sunLight.shadow.camera.right = 40;
+        sunLight.shadow.camera.top = 40; sunLight.shadow.camera.bottom = -40;
+        sunLight.shadow.camera.near = 0.5; sunLight.shadow.camera.far = 150;
         sunLight.shadow.mapSize.set(2048, 2048);
-        sunLight.shadow.bias = -0.002; 
+        sunLight.shadow.bias = -0.001; 
         scene.add(sunLight);
-
-        // Zacht Maanlicht
-        const moonLight = new THREE.DirectionalLight(0x5566aa, 0); 
-        moonLight.position.set(-20, 30, -20);
-        moonLight.castShadow = true;
-        scene.add(moonLight);
 
         // Gouden Bol in de lucht
         const sunSphereMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 1 });
         const sunSphere = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), sunSphereMat);
         scene.add(sunSphere);
 
+        // Rode kompas pijl (Noord)
         const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0.1, 0), 10, 0xff0000);
         scene.add(arrowHelper);
 
@@ -191,7 +168,8 @@
         function build3DModel() {
             modelGroup.clear();
             const wallMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
-            const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.DoubleSide });
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide }); // Iets lichter grijs
+            const personMat = new THREE.MeshStandardMaterial({ color: 0x3498db });
 
             const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 10), floorMat);
             floor.receiveShadow = true;
@@ -202,7 +180,7 @@
             terrace.receiveShadow = true;
             modelGroup.add(terrace);
 
-            const personMat = new THREE.MeshStandardMaterial({ color: 0x3498db });
+            // Persoon op het terras
             const personBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1, 8, 16), personMat);
             personBody.position.set(-2, 0.8, 7);
             personBody.castShadow = true;
@@ -216,30 +194,26 @@
                 modelGroup.add(wall);
             };
 
-            createWall(10.2, 3, 0.3, 0, 1.5, -5); 
-            createWall(0.3, 3, 10.2, -5, 1.5, 0); 
-            createWall(0.3, 3, 10.2, 5, 1.5, 0);  
-            createWall(2.8, 3, 0.3, -3.6, 1.5, 5.1); 
-            createWall(2.8, 3, 0.3, 3.6, 1.5, 5.1);
-            createWall(4.4, 0.6, 0.3, 0, 2.7, 5.1); 
+            // Muren (met extra dikte en dak-oversteek tegen lichtlekken)
+            createWall(10.2, 3, 0.4, 0, 1.5, -5); 
+            createWall(0.4, 3, 10.2, -5, 1.5, 0); 
+            createWall(0.4, 3, 10.2, 5, 1.5, 0);  
+            createWall(2.8, 3, 0.4, -3.6, 1.5, 5.1); 
+            createWall(2.8, 3, 0.4, 3.6, 1.5, 5.1);
+            createWall(4.4, 0.6, 0.4, 0, 2.7, 5.1); 
 
             if (document.getElementById('wallsToggle').checked) {
-                createWall(0.3, 3, 4, -5, 1.5, 7); 
-                createWall(0.3, 3, 4, 5, 1.5, 7);
+                createWall(0.4, 3, 4, -5, 1.5, 7); 
+                createWall(0.4, 3, 4, 5, 1.5, 7);
             }
 
             if (document.getElementById('roofToggle').checked) {
-                const roof = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.3, 14.4), wallMat);
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.4, 14.4), wallMat);
                 roof.position.set(0, 3.1, 2);
                 roof.castShadow = true;
                 roof.receiveShadow = true;
                 modelGroup.add(roof);
             }
-        }
-
-        function handleModelChange() {
-            build3DModel();
-            updateSimulation();
         }
 
         // --- HOOFD SIMULATIE ---
@@ -256,19 +230,14 @@
             sunLight.position.set(x, y, z);
             sunSphere.position.set(x, y, z);
             
-            // Dag & Nacht controle
             if (altitude > 0) {
                 sunLight.intensity = 2.8;
-                moonLight.intensity = 0; 
                 let warmFactor = Math.max(0, 1 - (altitude * 2));
                 sunLight.color.setHSL(0.12 - (warmFactor * 0.05), 1, 0.6);
                 sunSphere.visible = true;
-                scene.background = new THREE.Color(0x0a0a1a);
             } else {
                 sunLight.intensity = 0; 
-                moonLight.intensity = 0.5; 
                 sunSphere.visible = false;
-                scene.background = new THREE.Color(0x020205); 
             }
 
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
@@ -284,16 +253,6 @@
                 `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
                 `<strong>Hoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°`;
         }
-
-        // --- FIX: Window Resize Listener ---
-        // Resize wordt nu netjes geregeld bij het aanpassen van de window, niet in de animatieloop
-        window.addEventListener('resize', () => {
-            if(viewerDiv.clientWidth > 0 && viewerDiv.clientHeight > 0) {
-                camera.aspect = viewerDiv.clientWidth / viewerDiv.clientHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(viewerDiv.clientWidth, viewerDiv.clientHeight);
-            }
-        });
 
         // --- CONTROLS ---
         timeSlider.oninput = function() {
@@ -320,11 +279,9 @@
             if(s === 'winter') currentDate = new Date(y, 11, 21, 12, 0);
             if(s === 'nu') {
                 currentDate = new Date();
-                currentDate.setHours(12, 0, 0, 0); 
             }
             datePicker.valueAsDate = currentDate;
             timeSlider.value = currentDate.getHours() * 60 + currentDate.getMinutes();
-            // Forceer update van UI
             timeSlider.dispatchEvent(new Event('input'));
         }
 
@@ -343,16 +300,27 @@
             }
         }
 
+        // --- TERUGGEDRAAIDE RESIZE METHODE (Voorkomt zwarte schermen) ---
         function animate() {
             requestAnimationFrame(animate);
-            controls3d.update(); // Zorgt voor soepele muisbewegingen
-            renderer.render(scene, camera);
+            
+            const viewer = document.getElementById('viewer3d');
+            const w = viewer.clientWidth;
+            const h = viewer.clientHeight;
+            
+            // Check continue of de canvas wel de juiste grootte heeft
+            if (w > 0 && h > 0) {
+                renderer.setSize(w, h);
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                controls3d.update();
+                renderer.render(scene, camera);
+            }
         }
 
-        // --- START APPLICATIE ---
-        // Forceer een propere start-tijd zodat je altijd daglicht hebt
-        setSeason('nu');
+        // Start applicatie
         build3DModel();
+        updateSimulation();
         animate();
     </script>
 </body>
