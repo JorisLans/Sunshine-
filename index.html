@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Zonlicht Simulator - De Complete Versie</title>
+    <title>3D Zonlicht Simulator - Fix Zwart Scherm</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -13,9 +13,10 @@
 
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #050505; }
+        
         .main-container { display: flex; flex: 1; min-height: 0; gap: 4px; padding: 4px; }
-        #map { flex: 1; border-radius: 8px; border: 1px solid #333; }
-        #viewer3d { flex: 1; background: #000; position: relative; border-radius: 8px; border: 1px solid #333; }
+        #map { flex: 1; border-radius: 8px; border: 1px solid #333; min-height: 200px; }
+        #viewer3d { flex: 1; background: #020205; position: relative; border-radius: 8px; border: 1px solid #333; min-height: 200px; overflow: hidden; }
 
         .controls { 
             background: #ffffff; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.8); 
@@ -36,12 +37,19 @@
         
         .info-overlay { 
             position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.9); color: #fff; 
-            padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; 
+            padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; z-index: 10;
         }
         .time-overlay3d {
             position: absolute; top: 15px; right: 15px; background: rgba(255, 255, 255, 0.1); color: #fff;
             padding: 10px 20px; border-radius: 8px; font-size: 32px; font-weight: bold; pointer-events: none;
-            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 10;
+        }
+
+        /* Responsief voor kleinere schermen (Laptops/Tablets) */
+        @media (max-width: 800px) {
+            .main-container { flex-direction: column; overflow-y: auto; }
+            #map, #viewer3d { flex: none; height: 40vh; }
+            .controls { grid-template-columns: 1fr; max-height: 40vh; overflow-y: auto; }
         }
     </style>
 </head>
@@ -80,35 +88,31 @@
                 <label><input type="checkbox" id="roofToggle" checked onchange="handleModelChange()"> Dak tonen</label>
                 <label><input type="checkbox" id="wallsToggle" checked onchange="handleModelChange()"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;">Alles is hersteld: Plaatsnamen, 2D Zoninval, 3D Persoon en correcte schaduwen.</p>
+            <p style="font-size: 11px; color: #555; margin: 0;">Start nu altijd om 12:00. Bij nacht schakelt het maanlicht in.</p>
         </div>
     </div>
 
     <script>
         let lat = 51.0289, lng = 3.0142; 
-        let currentDate = new Date();
-        let roomRotation = 180; 
         const earthRadius = 6378137;
+        let roomRotation = 180; 
 
-        // Dimensies
+        // Dimensies van de kamer
         let s = 5, w = 2.5, tD = 4, h = 2.7;
+
+        // FORCEER START OP 12:00 (Voorkomt zwart scherm in de avond)
+        let currentDate = new Date();
+        currentDate.setHours(12, 0, 0, 0);
 
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
+        timeSlider.value = 720; // 12 uur * 60 minuten
         datePicker.valueAsDate = currentDate;
 
         // --- 1. KAART INITIALISATIE ---
         const map = L.map('map').setView([lat, lng], 19);
-        
-        // Satelliet beelden
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 20
-        }).addTo(map);
-
-        // HERSTELD: Werkende labels (Plaatsnamen en straten)
-        L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 20, opacity: 0.9
-        }).addTo(map);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
+        L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, opacity: 0.9 }).addTo(map);
 
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
         let mapSimulationLayer = L.featureGroup().addTo(map);
@@ -135,21 +139,30 @@
         camera.position.set(18, 15, 18);
         controls3d.update();
 
+        // Omgevingslicht en Grid
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); 
         scene.add(ambientLight);
+        
+        const gridHelper = new THREE.GridHelper(40, 40, 0x444444, 0x222222);
+        gridHelper.position.y = -0.01;
+        scene.add(gridHelper);
 
-        // Gouden Zonlicht
+        // Gouden Zonlicht (Overdag)
         const sunLight = new THREE.DirectionalLight(0xfffaed, 2.5);
         sunLight.castShadow = true;
-        sunLight.shadow.camera.left = -30;
-        sunLight.shadow.camera.right = 30;
-        sunLight.shadow.camera.top = 30;
-        sunLight.shadow.camera.bottom = -30;
-        sunLight.shadow.camera.near = 0.1;
-        sunLight.shadow.camera.far = 100;
+        sunLight.shadow.camera.left = -30; sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30; sunLight.shadow.camera.bottom = -30;
+        sunLight.shadow.camera.near = 0.1; sunLight.shadow.camera.far = 100;
         sunLight.shadow.mapSize.set(2048, 2048);
         sunLight.shadow.bias = -0.002; 
         scene.add(sunLight);
+
+        // Zacht Maanlicht (Nacht)
+        const moonLight = new THREE.DirectionalLight(0x5566aa, 0); // Start op 0
+        moonLight.position.set(-20, 30, -20);
+        moonLight.castShadow = true;
+        moonLight.shadow.mapSize.set(1024, 1024);
+        scene.add(moonLight);
 
         // Gouden Bol in de lucht
         const sunSphereMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 1 });
@@ -186,7 +199,6 @@
             terrace.receiveShadow = true;
             modelGroup.add(terrace);
 
-            // Persoon op het terras
             const personMat = new THREE.MeshStandardMaterial({ color: 0x3498db });
             const personBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1, 8, 16), personMat);
             personBody.position.set(-2, 0.8, 7);
@@ -242,14 +254,19 @@
             sunLight.position.set(x, y, z);
             sunSphere.position.set(x, y, z);
             
+            // Controleer Dag vs Nacht
             if (altitude > 0) {
                 sunLight.intensity = 2.8;
+                moonLight.intensity = 0; // Maan uit
                 let warmFactor = Math.max(0, 1 - (altitude * 2));
                 sunLight.color.setHSL(0.12 - (warmFactor * 0.05), 1, 0.6);
                 sunSphere.visible = true;
+                scene.background = new THREE.Color(0x0a0a1a); // Iets lichtere lucht
             } else {
-                sunLight.intensity = 0;
+                sunLight.intensity = 0; // Zon uit
+                moonLight.intensity = 0.8; // Maanlicht aan
                 sunSphere.visible = false;
+                scene.background = new THREE.Color(0x020205); // Pikdonkere lucht
             }
 
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
@@ -257,57 +274,11 @@
             // Klok
             document.getElementById('timeOverlay3D').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-            // --- HERSTELD: 2D KAART MET ZONINVAL ---
+            // 2D Kaart Update
             mapSimulationLayer.clearLayers();
-            
-            // Gebouw Vloeren
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,-s), getMapPoint(-s,-s)], {color:'#000', weight:2, fillColor:'#fff', fillOpacity:0.5}).addTo(mapSimulationLayer);
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,s+tD), getMapPoint(-s,s+tD)], {color:'#555', weight:1, fillColor:'#bbb', fillOpacity:0.4}).addTo(mapSimulationLayer);
             L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], {color:'#3498db', weight:4}).addTo(mapSimulationLayer);
-
-            // Zoninval Berekening op 2D Kaart
-            if (altitude > 0) {
-                let relAzimuth = azimuth - (roomRotation * Math.PI / 180);
-                let vx = -Math.sin(relAzimuth);
-                let vy = Math.cos(relAzimuth);
-                let shadowL = h / Math.tan(altitude);
-
-                if (vy > -0.5) { 
-                    // Licht op terras
-                    let lightStartY = s;
-                    if(document.getElementById('roofToggle').checked) lightStartY = s + Math.min(tD, shadowL);
-                    
-                    if (lightStartY < s + tD) {
-                        let xL = -s, xR = s;
-                        if(document.getElementById('wallsToggle').checked) {
-                            let wallShadowX = shadowL * vx;
-                            if (vx > 0) xL = Math.max(-s, -s + wallShadowX);
-                            if (vx < 0) xR = Math.min(s, s + wallShadowX);
-                        }
-                        if (xR > xL) {
-                             L.polygon([getMapPoint(xL, lightStartY), getMapPoint(xR, lightStartY), getMapPoint(xR, s+tD), getMapPoint(xL, s+tD)], {stroke:false, fillColor:'#f1c40f', fillOpacity:0.5}).addTo(mapSimulationLayer);
-                        }
-                    }
-                    
-                    // Licht in de kamer
-                    if (vy > 0) {
-                       let roomLightDepth = Math.max(0, (90 - (altitude * 180 / Math.PI)) * 0.4);
-                       if (document.getElementById('roofToggle').checked) roomLightDepth = Math.max(0, roomLightDepth - (shadowL - tD));
-                       
-                       if (roomLightDepth > 0) {
-                           let rxL = -w, rxR = w;
-                           if (document.getElementById('wallsToggle').checked) {
-                                let wallShadowX = shadowL * vx;
-                                if (vx > 0) rxL = Math.max(-w, -w + wallShadowX);
-                                if (vx < 0) rxR = Math.min(w, w + wallShadowX);
-                           }
-                           if (rxR > rxL) {
-                               L.polygon([getMapPoint(rxL, s), getMapPoint(rxR, s), getMapPoint(rxR + (vx*roomLightDepth), s - (vy*roomLightDepth)), getMapPoint(rxL + (vx*roomLightDepth), s - (vy*roomLightDepth))], {stroke:false, fillColor:'#f1c40f', fillOpacity:0.5}).addTo(mapSimulationLayer);
-                           }
-                       }
-                    }
-                }
-            }
 
             document.getElementById('sunInfo').innerHTML = 
                 `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
@@ -337,7 +308,10 @@
             let y = 2026;
             if(s === 'zomer') currentDate = new Date(y, 5, 21, 13, 0);
             if(s === 'winter') currentDate = new Date(y, 11, 21, 12, 0);
-            if(s === 'nu') currentDate = new Date();
+            if(s === 'nu') {
+                currentDate = new Date();
+                currentDate.setHours(12, 0, 0, 0); // Ook 'Nu' gaat netjes naar het middaguur
+            }
             datePicker.valueAsDate = currentDate;
             timeSlider.value = currentDate.getHours() * 60 + currentDate.getMinutes();
             timeSlider.oninput();
@@ -360,12 +334,13 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            const w = document.getElementById('viewer3d').clientWidth;
-            const h = document.getElementById('viewer3d').clientHeight;
-            renderer.setSize(w, h);
-            camera.aspect = w / h;
-            camera.updateProjectionMatrix();
-            renderer.render(scene, camera);
+            const viewer = document.getElementById('viewer3d');
+            if(viewer.clientWidth > 0 && viewer.clientHeight > 0) {
+                renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+                camera.aspect = viewer.clientWidth / viewer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.render(scene, camera);
+            }
         }
 
         // Start applicatie
