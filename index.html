@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Stabiele Gouden Editie</title>
+    <title>Zonlicht Simulator - Stabiel + Klok</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -28,7 +28,15 @@
         #playBtn { flex: 0 0 100px; background: #f39c12; color: #000; }
         #playBtn.playing { background: #e74c3c; color: #fff; }
         .options-box { display: flex; gap: 15px; background: #f0f2f5; padding: 12px; border-radius: 8px; border: 1px solid #ccc; }
-        .info-overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.9); color: #fff; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; }
+        
+        .info-overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.9); color: #fff; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; z-index: 10; }
+        
+        /* CSS voor de 3D Klok */
+        .time-overlay3d {
+            position: absolute; top: 15px; right: 15px; background: rgba(255, 255, 255, 0.1); color: #fff;
+            padding: 10px 20px; border-radius: 8px; font-size: 32px; font-weight: bold; pointer-events: none;
+            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -37,6 +45,7 @@
         <div id="map"></div>
         <div id="viewer3d">
             <div class="info-overlay" id="sunInfo">Laden...</div>
+            <div class="time-overlay3d" id="timeOverlay3D">12:00</div>
         </div>
     </div>
 
@@ -63,7 +72,7 @@
                 <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Plafond/Dak</label>
                 <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;">Teruggezet naar de schone versie: zonder tijdsaanduiding en persoon.</p>
+            <p style="font-size: 11px; color: #555; margin: 0;">De 3D-klok is toegevoegd (rechtsboven in het zwarte scherm).</p>
         </div>
     </div>
 
@@ -73,7 +82,6 @@
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         
-        // Zorg dat we altijd op de middag starten voor licht
         currentDate.setHours(12, 0, 0, 0);
         datePicker.valueAsDate = currentDate;
 
@@ -112,7 +120,6 @@
         const sunLight = new THREE.DirectionalLight(0xffcc33, 2.8); 
         sunLight.castShadow = true;
         
-        // SHADOW OPTIMALISATIE
         sunLight.shadow.camera.left = -15; 
         sunLight.shadow.camera.right = 15;
         sunLight.shadow.camera.top = 15;
@@ -121,7 +128,6 @@
         sunLight.shadow.camera.far = 100;
         sunLight.shadow.mapSize.set(2048, 2048);
         
-        // BIAS FIXES tegen lichtlekken
         sunLight.shadow.bias = -0.0005; 
         sunLight.shadow.normalBias = 0.05; 
         
@@ -142,7 +148,6 @@
             const wallMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
             const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.DoubleSide });
 
-            // Vloeren (met dikte)
             const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 10), floorMat);
             floor.receiveShadow = true;
             modelGroup.add(floor);
@@ -160,7 +165,6 @@
                 modelGroup.add(wall);
             };
 
-            // Muren
             createWall(10.2, 3, 0.4, 0, 1.5, -5); 
             createWall(0.4, 3, 10.2, -5, 1.5, 0); 
             createWall(0.4, 3, 10.2, 5, 1.5, 0);  
@@ -174,7 +178,6 @@
             }
 
             if (document.getElementById('roofToggle').checked) {
-                // DAK MET OVERSTEK om lekken te blokkeren
                 const roof = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.4, 14.4), wallMat);
                 roof.position.set(0, 3.1, 2);
                 roof.castShadow = true;
@@ -209,7 +212,10 @@
 
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
 
-            // 2D Sync (Kamer + Terras op kaart)
+            // Klok in de 3D weergave updaten
+            document.getElementById('timeOverlay3D').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            // 2D Sync
             mapSimulationLayer.clearLayers();
             let s = 5, w = 2.5, tD = 4;
             function getMapPoint(x, y) {
@@ -281,7 +287,6 @@
             const w = viewer.clientWidth;
             const h = viewer.clientHeight;
             
-            // Render alleen als de container zichtbaar is (voorkomt crashes)
             if (w > 0 && h > 0) {
                 renderer.setSize(w, h);
                 camera.aspect = w / h;
