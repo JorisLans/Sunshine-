@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Zonlicht Simulator - Stabiele Versie</title>
-    
+    <title>Zonlicht Simulator - Stabiele Gouden Editie</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -12,12 +11,10 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #111; }
-        
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #050505; }
         .main-container { display: flex; flex: 1; min-height: 0; gap: 4px; padding: 4px; }
         #map { flex: 1; border-radius: 8px; border: 1px solid #333; }
-        #viewer3d { flex: 1; background: #050505; position: relative; border-radius: 8px; border: 1px solid #333; overflow: hidden; }
-
+        #viewer3d { flex: 1; background: #000; position: relative; border-radius: 8px; border: 1px solid #333; }
         .controls { 
             background: #ffffff; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.8); 
             display: grid; grid-template-columns: 1fr 1fr; gap: 20px; z-index: 100;
@@ -25,35 +22,21 @@
         .control-group { display: flex; flex-direction: column; gap: 8px; }
         .time-header { display: flex; justify-content: space-between; align-items: center; }
         label { font-weight: bold; font-size: 14px; color: #333; }
-        
         input[type="range"] { width: 100%; cursor: pointer; }
         .buttons { display: flex; gap: 8px; }
         button { flex: 1; padding: 10px; border: none; background: #2c3e50; color: white; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
-        button:hover { background: #1a252f; }
         #playBtn { flex: 0 0 100px; background: #f39c12; color: #000; }
         #playBtn.playing { background: #e74c3c; color: #fff; }
-
         .options-box { display: flex; gap: 15px; background: #f0f2f5; padding: 12px; border-radius: 8px; border: 1px solid #ccc; }
-        
-        .info-overlay { 
-            position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); color: #fff; 
-            padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; z-index: 10;
-        }
-        .time-overlay3d {
-            position: absolute; top: 15px; right: 15px; background: rgba(255, 255, 255, 0.1); color: #fff;
-            padding: 10px 20px; border-radius: 8px; font-size: 32px; font-weight: bold; pointer-events: none;
-            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 10;
-        }
+        .info-overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.9); color: #fff; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #f39c12; }
     </style>
 </head>
 <body>
 
     <div class="main-container">
         <div id="map"></div>
-        
         <div id="viewer3d">
             <div class="info-overlay" id="sunInfo">Laden...</div>
-            <div class="time-overlay3d" id="timeOverlay3D">12:00</div>
         </div>
     </div>
 
@@ -76,33 +59,28 @@
         <div class="control-group">
             <label>Draai Appartement: <span id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
-            
             <div class="options-box">
-                <label><input type="checkbox" id="roofToggle" checked onchange="build3DModel(); updateSimulation();"> Dak tonen</label>
-                <label><input type="checkbox" id="wallsToggle" checked onchange="build3DModel(); updateSimulation();"> Zijmuren</label>
+                <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Plafond/Dak</label>
+                <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;"><b>Teruggedraaid:</b> De robuuste weergave van 5 versies geleden is hersteld.</p>
+            <p style="font-size: 11px; color: #555; margin: 0;">Teruggezet naar de schone versie: zonder tijdsaanduiding en persoon.</p>
         </div>
     </div>
 
     <script>
-        let lat = 51.0289, lng = 3.0142; 
+        let lat = 51.0289, lng = 3.0142, currentDate = new Date(), roomRotation = 180;
         const earthRadius = 6378137;
-        let roomRotation = 180; 
-        let s = 5, w = 2.5, tD = 4, h = 2.7;
-
-        let currentDate = new Date();
-        currentDate.setHours(12, 0, 0, 0);
-
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
-        timeSlider.value = 720;
+        
+        // Zorg dat we altijd op de middag starten voor licht
+        currentDate.setHours(12, 0, 0, 0);
         datePicker.valueAsDate = currentDate;
 
-        // --- 1. KAART INITIALISATIE ---
+        // --- KAART ---
         const map = L.map('map').setView([lat, lng], 19);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
-        L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, opacity: 0.9 }).addTo(map);
+        L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, opacity: 0.8 }).addTo(map);
 
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
         let mapSimulationLayer = L.featureGroup().addTo(map);
@@ -112,13 +90,12 @@
             marker.setLatLng([lat, lng]);
             updateSimulation();
         }
-
         map.on('click', (e) => updateLocation(e.latlng.lat, e.latlng.lng));
         marker.on('drag', (e) => updateLocation(e.target.getLatLng().lat, e.target.getLatLng().lng));
 
-        // --- 2. THREE.JS INITIALISATIE (TERUGGEDRAAID NAAR WERKENDE METHODE) ---
+        // --- THREE.JS ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a0a); // Niet pikzwart
+        scene.background = new THREE.Color(0x020205);
         const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.shadowMap.enabled = true;
@@ -129,48 +106,43 @@
         camera.position.set(18, 15, 18);
         controls3d.update();
 
-        // Voldoende basislicht zodat we altijd iets zien
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); 
+        const ambientLight = new THREE.AmbientLight(0x4040ff, 0.05);
         scene.add(ambientLight);
 
-        // Gouden Zonlicht met veilige, brede schaduw-marges
-        const sunLight = new THREE.DirectionalLight(0xfffaed, 2.5);
+        const sunLight = new THREE.DirectionalLight(0xffcc33, 2.8); 
         sunLight.castShadow = true;
-        sunLight.shadow.camera.left = -40; sunLight.shadow.camera.right = 40;
-        sunLight.shadow.camera.top = 40; sunLight.shadow.camera.bottom = -40;
-        sunLight.shadow.camera.near = 0.5; sunLight.shadow.camera.far = 150;
+        
+        // SHADOW OPTIMALISATIE
+        sunLight.shadow.camera.left = -15; 
+        sunLight.shadow.camera.right = 15;
+        sunLight.shadow.camera.top = 15;
+        sunLight.shadow.camera.bottom = -15;
+        sunLight.shadow.camera.near = 1;
+        sunLight.shadow.camera.far = 100;
         sunLight.shadow.mapSize.set(2048, 2048);
-        sunLight.shadow.bias = -0.001; 
+        
+        // BIAS FIXES tegen lichtlekken
+        sunLight.shadow.bias = -0.0005; 
+        sunLight.shadow.normalBias = 0.05; 
+        
         scene.add(sunLight);
 
-        // Gouden Bol in de lucht
         const sunSphereMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 1 });
         const sunSphere = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), sunSphereMat);
         scene.add(sunSphere);
 
-        // Rode kompas pijl (Noord)
         const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0.1, 0), 10, 0xff0000);
         scene.add(arrowHelper);
 
         let modelGroup = new THREE.Group();
         scene.add(modelGroup);
 
-        function getMapPoint(x, y) {
-            let rad = roomRotation * Math.PI / 180;
-            let rx = x * Math.cos(rad) + y * Math.sin(rad);
-            let ry = -x * Math.sin(rad) + y * Math.cos(rad);
-            let dLat = (ry / earthRadius) * (180 / Math.PI);
-            let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
-            return [lat + dLat, lng + dLng];
-        }
-
-        // --- 3D MODEL OPBOUW ---
-        function build3DModel() {
+        function update3DModel() {
             modelGroup.clear();
             const wallMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
-            const floorMat = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide }); // Iets lichter grijs
-            const personMat = new THREE.MeshStandardMaterial({ color: 0x3498db });
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.DoubleSide });
 
+            // Vloeren (met dikte)
             const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 10), floorMat);
             floor.receiveShadow = true;
             modelGroup.add(floor);
@@ -180,12 +152,6 @@
             terrace.receiveShadow = true;
             modelGroup.add(terrace);
 
-            // Persoon op het terras
-            const personBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1, 8, 16), personMat);
-            personBody.position.set(-2, 0.8, 7);
-            personBody.castShadow = true;
-            modelGroup.add(personBody);
-
             const createWall = (w, h, d, x, y, z) => {
                 const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
                 wall.position.set(x, y, z);
@@ -194,7 +160,7 @@
                 modelGroup.add(wall);
             };
 
-            // Muren (met extra dikte en dak-oversteek tegen lichtlekken)
+            // Muren
             createWall(10.2, 3, 0.4, 0, 1.5, -5); 
             createWall(0.4, 3, 10.2, -5, 1.5, 0); 
             createWall(0.4, 3, 10.2, 5, 1.5, 0);  
@@ -208,6 +174,7 @@
             }
 
             if (document.getElementById('roofToggle').checked) {
+                // DAK MET OVERSTEK om lekken te blokkeren
                 const roof = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.4, 14.4), wallMat);
                 roof.position.set(0, 3.1, 2);
                 roof.castShadow = true;
@@ -216,8 +183,8 @@
             }
         }
 
-        // --- HOOFD SIMULATIE ---
         function updateSimulation() {
+            update3DModel();
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
             let azimuth = sunPos.azimuth; 
             let altitude = sunPos.altitude;
@@ -236,37 +203,44 @@
                 sunLight.color.setHSL(0.12 - (warmFactor * 0.05), 1, 0.6);
                 sunSphere.visible = true;
             } else {
-                sunLight.intensity = 0; 
+                sunLight.intensity = 0;
                 sunSphere.visible = false;
             }
 
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
-            document.getElementById('timeOverlay3D').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-            // 2D Kaart Update
+            // 2D Sync (Kamer + Terras op kaart)
             mapSimulationLayer.clearLayers();
+            let s = 5, w = 2.5, tD = 4;
+            function getMapPoint(x, y) {
+                let rad = roomRotation * Math.PI / 180;
+                let rx = x * Math.cos(rad) + y * Math.sin(rad);
+                let ry = -x * Math.sin(rad) + y * Math.cos(rad);
+                let dLat = (ry / earthRadius) * (180 / Math.PI);
+                let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
+                return [lat + dLat, lng + dLng];
+            }
+            
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,-s), getMapPoint(-s,-s)], {color:'#000', weight:2, fillColor:'#fff', fillOpacity:0.5}).addTo(mapSimulationLayer);
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,s+tD), getMapPoint(-s,s+tD)], {color:'#555', weight:1, fillColor:'#bbb', fillOpacity:0.4}).addTo(mapSimulationLayer);
             L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], {color:'#3498db', weight:4}).addTo(mapSimulationLayer);
 
             document.getElementById('sunInfo').innerHTML = 
-                `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
-                `<strong>Hoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°`;
+                `<strong>Hoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°<br>` +
+                `<strong>Status:</strong> ${altitude > 0 ? 'Gouden zon' : 'Nacht'}`;
         }
 
-        // --- CONTROLS ---
+        // --- UI & LOOP ---
         timeSlider.oninput = function() {
             currentDate.setHours(Math.floor(this.value / 60), this.value % 60);
             document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             updateSimulation();
         };
-
         document.getElementById('rotationSlider').oninput = function() {
             roomRotation = parseInt(this.value);
             document.getElementById('rotationVal').textContent = roomRotation;
             updateSimulation();
         };
-
         document.getElementById('datePicker').onchange = function() {
             let d = new Date(this.value);
             currentDate.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
@@ -279,10 +253,11 @@
             if(s === 'winter') currentDate = new Date(y, 11, 21, 12, 0);
             if(s === 'nu') {
                 currentDate = new Date();
+                currentDate.setHours(12, 0, 0, 0);
             }
-            datePicker.valueAsDate = currentDate;
+            document.getElementById('datePicker').valueAsDate = currentDate;
             timeSlider.value = currentDate.getHours() * 60 + currentDate.getMinutes();
-            timeSlider.dispatchEvent(new Event('input'));
+            timeSlider.oninput();
         }
 
         let isPlaying = false, animationInterval;
@@ -292,7 +267,7 @@
                 document.getElementById('playBtn').innerHTML = '⏸ Pauze';
                 animationInterval = setInterval(() => {
                     timeSlider.value = (parseInt(timeSlider.value) + 5) % 1440;
-                    timeSlider.dispatchEvent(new Event('input'));
+                    timeSlider.oninput();
                 }, 50);
             } else {
                 document.getElementById('playBtn').innerHTML = '▶ Play';
@@ -300,26 +275,21 @@
             }
         }
 
-        // --- TERUGGEDRAAIDE RESIZE METHODE (Voorkomt zwarte schermen) ---
         function animate() {
             requestAnimationFrame(animate);
-            
             const viewer = document.getElementById('viewer3d');
             const w = viewer.clientWidth;
             const h = viewer.clientHeight;
             
-            // Check continue of de canvas wel de juiste grootte heeft
+            // Render alleen als de container zichtbaar is (voorkomt crashes)
             if (w > 0 && h > 0) {
                 renderer.setSize(w, h);
                 camera.aspect = w / h;
                 camera.updateProjectionMatrix();
-                controls3d.update();
                 renderer.render(scene, camera);
             }
         }
 
-        // Start applicatie
-        build3DModel();
         updateSimulation();
         animate();
     </script>
