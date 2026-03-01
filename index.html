@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator - Gecorrigeerde 2D & Gouden 3D</title>
+    <title>Zonlicht Simulator - Golden Hour Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,7 +13,7 @@
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #050505; }
         .main-container { display: flex; flex: 1; min-height: 0; gap: 4px; padding: 4px; }
-        #map { flex: 1; border-radius: 8px; }
+        #map { flex: 1; border-radius: 8px; border: 1px solid #333; }
         #viewer3d { flex: 1; background: #000; position: relative; border-radius: 8px; border: 1px solid #333; }
         .controls { 
             background: #ffffff; padding: 20px; box-shadow: 0 -4px 15px rgba(0,0,0,0.8); 
@@ -63,7 +63,7 @@
                 <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Plafond/Dak</label>
                 <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;"><b>Check:</b> Het 2D-appartement is terug. 3D heeft nu een gouden zon.</p>
+            <p style="font-size: 11px; color: #555; margin: 0;"><b>Update:</b> Het licht in 3D is nu warm goud-geel.</p>
         </div>
     </div>
 
@@ -74,15 +74,10 @@
         const datePicker = document.getElementById('datePicker');
         datePicker.valueAsDate = currentDate;
 
-        // Globaal gedefinieerde afmetingen
-        let s = 5;      // Kamer half-breedte
-        let w = 2.5;    // Raam half-breedte
-        let tD = 4;     // Terras diepte
-        let h = 2.7;    // Plafondhoogte
+        let s = 5, w = 2.5, tD = 4, h = 2.7;
 
-        // --- KAART INITIALISATIE (Satelliet + Labels) ---
+        // --- KAART ---
         const map = L.map('map').setView([lat, lng], 19);
-        
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
         L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, opacity: 0.8 }).addTo(map);
 
@@ -97,7 +92,7 @@
         map.on('click', (e) => updateLocation(e.latlng.lat, e.latlng.lng));
         marker.on('drag', (e) => updateLocation(e.target.getLatLng().lat, e.target.getLatLng().lng));
 
-        // --- THREE.JS INITIALISATIE (3D Engine) ---
+        // --- THREE.JS (Gouden Licht Update) ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x020205);
         const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
@@ -110,39 +105,33 @@
         camera.position.set(18, 15, 18);
         controls3d.update();
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); 
+        const ambientLight = new THREE.AmbientLight(0x4040ff, 0.05); // Subtiel blauwachtig omgevingslicht voor contrast
         scene.add(ambientLight);
 
-        const sunLight = new THREE.DirectionalLight(0xfffaed, 2.5);
+        // De Zon Lichtbron (Nu warm goud-geel)
+        const sunLight = new THREE.DirectionalLight(0xffcc33, 2.8); 
         sunLight.castShadow = true;
         sunLight.shadow.camera.left = -30;
         sunLight.shadow.camera.right = 30;
         sunLight.shadow.camera.top = 30;
         sunLight.shadow.camera.bottom = -30;
-        sunLight.shadow.camera.near = 0.1;
-        sunLight.shadow.camera.far = 100;
         sunLight.shadow.mapSize.set(2048, 2048);
         sunLight.shadow.bias = -0.002; 
         scene.add(sunLight);
 
-        // --- 2. GOUDEN ZON IN 3D ---
-        // Visuele Zon (Gouden, stralende bol)
         const sunSphereMat = new THREE.MeshStandardMaterial({
-            color: 0xffd700, // Goudkleur
-            emissive: 0xffd700, // Maak het zelf-verlichtend
-            emissiveIntensity: 0.8
+            color: 0xffaa00,
+            emissive: 0xffaa00,
+            emissiveIntensity: 1
         });
         const sunSphere = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), sunSphereMat);
         scene.add(sunSphere);
 
-        // Kompas hulpstuk (Rode pijl naar het noorden)
         const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0.1, 0), 10, 0xff0000);
         scene.add(arrowHelper);
 
         let modelGroup = new THREE.Group();
         scene.add(modelGroup);
-
-        // --- HULPFUNCTIES KAART VISUALISATIE ---
 
         function getMapPoint(x, y) {
             let rad = roomRotation * Math.PI / 180;
@@ -153,14 +142,11 @@
             return [lat + dLat, lng + dLng];
         }
 
-        // --- RENDERING LOGICA ---
-
         function update3DModel() {
             modelGroup.clear();
             const wallMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
             const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.DoubleSide });
 
-            // Vloeren (ontvangen schaduw)
             const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 10), floorMat);
             floor.receiveShadow = true;
             modelGroup.add(floor);
@@ -170,7 +156,6 @@
             terrace.receiveShadow = true;
             modelGroup.add(terrace);
 
-            // Muren (werpen schaduw)
             const createWall = (w, h, d, x, y, z) => {
                 const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
                 wall.position.set(x, y, z);
@@ -202,8 +187,6 @@
 
         function updateSimulation() {
             update3DModel();
-            
-            // --- ZON BEREKENING & 3D SYNC ---
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
             let azimuth = sunPos.azimuth; 
             let altitude = sunPos.altitude;
@@ -216,40 +199,35 @@
             sunLight.position.set(x, y, z);
             sunSphere.position.set(x, y, z);
             
-            // Licht uit als zon onder is
-            sunLight.intensity = altitude > 0 ? 3.0 : 0;
-            sunSphere.visible = altitude > 0;
+            // Licht aanpassen op basis van hoogte (Geler bij zonsopgang/ondergang)
+            if (altitude > 0) {
+                sunLight.intensity = 2.8;
+                let warmFactor = Math.max(0, 1 - (altitude * 2)); // Meer oranje als de zon laag staat
+                sunLight.color.setHSL(0.12 - (warmFactor * 0.05), 1, 0.6);
+                sunSphere.visible = true;
+            } else {
+                sunLight.intensity = 0;
+                sunSphere.visible = false;
+            }
 
-            // Update 3D Rotatie van appartement
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
 
-            // --- 1. KAART VISUALISATIE (2D Appartement terug) ---
+            // 2D Kaart Sync
             mapSimulationLayer.clearLayers();
-            
-            // Appartement (Vloer) op kaart
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,-s), getMapPoint(-s,-s)], {
                 color: '#000', weight: 2, fillColor: '#fff', fillOpacity: 0.5
             }).addTo(mapSimulationLayer);
-            
-            // Terras (Vloer) op kaart
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,s+tD), getMapPoint(-s,s+tD)], {
                 color: '#555', weight: 1, fillColor: '#bbb', fillOpacity: 0.4
             }).addTo(mapSimulationLayer);
-            
-            // Raam (Blauwe lijn) op kaart
-            L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], {
-                color: '#3498db', weight: 4
-            }).addTo(mapSimulationLayer);
-            // Opmerking: Zoninval wordt niet meer gesimuleerd op 2D, zoals gevraagd.
+            L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], { color: '#3498db', weight: 4 }).addTo(mapSimulationLayer);
 
-            // UI Info
             document.getElementById('sunInfo').innerHTML = 
-                `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
                 `<strong>Hoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°<br>` +
-                `<strong>Azimuth:</strong> ${(azimuth * 180 / Math.PI + 180).toFixed(1)}°`;
+                `<strong>Kleur:</strong> ${altitude < 0.2 ? 'Warm Oranje' : 'Gouden Gloed'}`;
         }
 
-        // --- UI & EVENTS ---
+        // --- UI & LOOP ---
         timeSlider.oninput = function() {
             currentDate.setHours(Math.floor(this.value / 60), this.value % 60);
             document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
