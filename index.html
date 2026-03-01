@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Zonlicht Simulator - Satelliet Editie</title>
+    <title>Zonlicht Simulator - Gecorrigeerde Editie</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -28,7 +28,7 @@
         #playBtn { flex: 0 0 100px; background: #2ecc71; }
         #playBtn.playing { background: #e74c3c; }
         .options-box { display: flex; gap: 15px; background: #f0f2f5; padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; }
-        .info-overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.7); color: #fff; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #4A90E2; }
+        .info-overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); color: #fff; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border-left: 4px solid #4A90E2; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -50,44 +50,50 @@
             <label>Datum:</label>
             <input type="date" id="datePicker">
             <div class="buttons">
-                <button onclick="setSeason('zomer')">Midzomer</button>
-                <button onclick="setSeason('winter')">Midwinter</button>
+                <button onclick="setSeason('zomer')">Zomer</button>
+                <button onclick="setSeason('winter')">Winter</button>
                 <button onclick="setSeason('nu')">Nu</button>
             </div>
         </div>
 
         <div class="control-group">
-            <label>Oriëntatie: <span id="rotationVal">180</span>°</label>
+            <label>Oriëntatie Terras: <span id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
             <div class="options-box">
-                <label><input type="checkbox" id="roofToggle" checked onchange="update3DModel()"> Terras Dak</label>
-                <label><input type="checkbox" id="wallsToggle" checked onchange="update3DModel()"> Zijmuren</label>
+                <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Terras Dak</label>
+                <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Zijmuren</label>
             </div>
-            <p style="font-size: 11px; color: #555; margin: 0;">Klik op de satellietfoto om de locatie te verplaatsen.</p>
+            <p style="font-size: 11px; color: #555; margin: 0;">Blauwe lijn op kaart = raam. 3D: Rode pijl wijst naar het Noorden.</p>
         </div>
     </div>
 
     <script>
         let lat = 51.0289, lng = 3.0142, currentDate = new Date(), roomRotation = 180;
+        const earthRadius = 6378137;
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         const rotationSlider = document.getElementById('rotationSlider');
         datePicker.valueAsDate = currentDate;
 
-        // --- MAP INITIALIZATION (Satellietbeelden) ---
+        // --- 1. KAART INITIALISATIE (Met Satelliet + Labels) ---
         const map = L.map('map').setView([lat, lng], 19);
         
-        // Esri World Imagery Laag
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        // Satelliet beelden
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             maxZoom: 20
         }).addTo(map);
 
+        // Labels (Plaatsnamen en straten)
+        const labelLayer = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 20,
+            opacity: 0.8
+        }).addTo(map);
+
         let marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+        let mapSimulationLayer = L.featureGroup().addTo(map);
 
         function updateLocation(newLat, newLng) {
-            lat = newLat;
-            lng = newLng;
+            lat = newLat; lng = newLng;
             marker.setLatLng([lat, lng]);
             updateSimulation();
         }
@@ -95,17 +101,17 @@
         map.on('click', function(e) { updateLocation(e.latlng.lat, e.latlng.lng); });
         marker.on('drag', function(e) { updateLocation(e.target.getLatLng().lat, e.target.getLatLng().lng); });
 
-        // --- THREE.JS INITIALIZATION ---
+        // --- 2. THREE.JS INITIALISATIE (3D Engine) ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
-        const camera = new THREE.PerspectiveCamera(45, (window.innerWidth / 2) / (window.innerHeight - 250), 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.getElementById('viewer3d').appendChild(renderer.domElement);
 
         const controls3d = new THREE.OrbitControls(camera, renderer.domElement);
-        camera.position.set(12, 12, 12);
+        camera.position.set(15, 15, 15);
         controls3d.update();
 
         const ambientLight = new THREE.AmbientLight(0x404040, 1.8);
@@ -114,14 +120,27 @@
         const sunLight = new THREE.DirectionalLight(0xffffff, 1.6);
         sunLight.castShadow = true;
         sunLight.shadow.mapSize.set(2048, 2048);
-        sunLight.shadow.camera.left = -20;
-        sunLight.shadow.camera.right = 20;
-        sunLight.shadow.camera.top = 20;
-        sunLight.shadow.camera.bottom = -20;
         scene.add(sunLight);
+
+        // Kompas hulpstuk in 3D (Rode pijl naar het noorden)
+        const dir = new THREE.Vector3(0, 0, -1);
+        const origin = new THREE.Vector3(0, 0.2, 0);
+        const arrowHelper = new THREE.ArrowHelper(dir, origin, 8, 0xff0000);
+        scene.add(arrowHelper);
 
         let modelGroup = new THREE.Group();
         scene.add(modelGroup);
+
+        // --- 3. RENDERING & LOGICA ---
+
+        function getMapPoint(x, y) {
+            let rad = roomRotation * Math.PI / 180;
+            let rx = x * Math.cos(rad) + y * Math.sin(rad);
+            let ry = -x * Math.sin(rad) + y * Math.cos(rad);
+            let dLat = (ry / earthRadius) * (180 / Math.PI);
+            let dLng = (rx / (earthRadius * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
+            return [lat + dLat, lng + dLng];
+        }
 
         function update3DModel() {
             modelGroup.clear();
@@ -129,16 +148,17 @@
             const floorMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
             const terraceMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
 
-            // Vloeren
+            // Vloeren (10x10 kamer, 10x4 terras)
             const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10), floorMat);
             floor.receiveShadow = true;
             modelGroup.add(floor);
 
             const terrace = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 4), terraceMat);
-            terrace.position.set(0, 0, 7);
+            terrace.position.set(0, 0, 7); // y=0, z=5 (raam) + 2 (helft van diepte)
             terrace.receiveShadow = true;
             modelGroup.add(terrace);
 
+            // Muren (Kamer en Ramen)
             const createWall = (w, h, d, x, y, z) => {
                 const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
                 wall.position.set(x, y, z);
@@ -147,13 +167,12 @@
                 modelGroup.add(wall);
             };
 
-            createWall(10, 3, 0.2, 0, 1.5, -5); 
-            createWall(0.2, 3, 10, -5, 1.5, 0); 
-            createWall(0.2, 3, 10, 5, 1.5, 0);  
-            createWall(2.8, 3, 0.2, -3.6, 1.5, 5); 
-            createWall(2.8, 3, 0.2, 3.6, 1.5, 5);
-            createWall(4.4, 0.6, 0.2, 0, 2.7, 5); 
-            createWall(4.4, 0.4, 0.2, 0, 0.2, 5); 
+            createWall(10, 3, 0.2, 0, 1.5, -5); // Achtermuur
+            createWall(0.2, 3, 10, -5, 1.5, 0); // Links
+            createWall(0.2, 3, 10, 5, 1.5, 0);  // Rechts
+            createWall(2.8, 3, 0.2, -3.6, 1.5, 5); // Voormuur links
+            createWall(2.8, 3, 0.2, 3.6, 1.5, 5);  // Voormuur rechts
+            createWall(4.4, 0.6, 0.2, 0, 2.7, 5);  // Boven raam
 
             if (document.getElementById('wallsToggle').checked) {
                 createWall(0.2, 3, 4, -5, 1.5, 7); 
@@ -166,30 +185,62 @@
                 roof.castShadow = true;
                 modelGroup.add(roof);
             }
-            updateSimulation();
         }
 
         function updateSimulation() {
+            update3DModel();
+            
+            // --- ZON BEREKENING ---
             let sunPos = SunCalc.getPosition(currentDate, lat, lng);
-            let azimuth = sunPos.azimuth; 
+            let azimuth = sunPos.azimuth; // 0 = Zuid, -PI/2 = Oost, PI/2 = West
             let altitude = sunPos.altitude;
 
-            const dist = 35;
+            // Corrigeer zonpositie voor Three.js (Noord = -Z, Oost = -X)
+            const dist = 40;
+            // x = sin(-azimuth) zorgt dat Oost negatief X is
             sunLight.position.set(
                 dist * Math.sin(azimuth) * Math.cos(altitude),
                 dist * Math.sin(altitude),
                 dist * Math.cos(azimuth) * Math.cos(altitude)
             );
 
-            let skyIntensity = Math.max(0, Math.min(1, altitude * 2));
-            scene.background = new THREE.Color().setHSL(0.6, 0.4, skyIntensity * 0.4 + 0.1);
-            
-            document.getElementById('sunInfo').innerHTML = 
-                `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br><strong>Zonshoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°`;
-
+            // Update 3D Rotatie van appartement
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
+
+            // --- 2D KAART VISUALISATIE ---
+            mapSimulationLayer.clearLayers();
+            let s = 5, w = 2.5, tD = 4, h = 2.7;
+            
+            // Appartement op kaart
+            L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,-s), getMapPoint(-s,-s)], {color:'#2c3e50', weight:2, fillColor:'#fff', fillOpacity:0.6}).addTo(mapSimulationLayer);
+            // Terras op kaart
+            L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,s+tD), getMapPoint(-s,s+tD)], {color:'#7f8c8d', weight:1, fillColor:'#bdc3c7', fillOpacity:0.5}).addTo(mapSimulationLayer);
+            // Raam op kaart
+            L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], {color:'#3498db', weight:5}).addTo(mapSimulationLayer);
+
+            // Dynamische schaduw/licht op 2D kaart
+            if (altitude > 0) {
+                let relAzimuth = azimuth - (roomRotation * Math.PI / 180);
+                let vx = -Math.sin(relAzimuth), vy = Math.cos(relAzimuth);
+                if (vy > -0.5) {
+                    let shadowL = h / Math.tan(altitude);
+                    let lightStart = (s + tD) - shadowL;
+                    if (lightStart < s + tD) {
+                        let yS = Math.max(s, lightStart);
+                        L.polygon([getMapPoint(-s, yS), getMapPoint(s, yS), getMapPoint(s, s+tD), getMapPoint(-s, s+tD)], {stroke:false, fillColor:'#f1c40f', fillOpacity:0.4}).addTo(mapSimulationLayer);
+                    }
+                }
+            }
+
+            // UI Info
+            let azDeg = (azimuth * 180 / Math.PI + 180).toFixed(1);
+            document.getElementById('sunInfo').innerHTML = 
+                `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
+                `<strong>Zonshoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°<br>` +
+                `<strong>Richting (Azimuth):</strong> ${azDeg}° (180=Zuid)`;
         }
 
+        // --- CONTROLS & ANIMATIE ---
         timeSlider.oninput = function() {
             currentDate.setHours(Math.floor(this.value / 60), this.value % 60);
             document.getElementById('timeVal').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -243,7 +294,7 @@
             renderer.render(scene, camera);
         }
 
-        update3DModel();
+        updateSimulation();
         animate();
     </script>
 </body>
