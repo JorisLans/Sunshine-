@@ -107,15 +107,6 @@
         }
         .info-overlay strong { color: #cbd5e1; font-weight: 600; }
         
-        .time-overlay3d {
-            position: absolute; top: 16px; right: 16px; 
-            background: rgba(255, 255, 255, 0.1); color: #ffffff;
-            padding: 12px 24px; border-radius: 10px; font-size: 36px; font-weight: 700; 
-            pointer-events: none; z-index: 10;
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); letter-spacing: -1px;
-        }
     </style>
 </head>
 <body>
@@ -125,7 +116,6 @@
         
         <div id="viewer3d">
             <div class="info-overlay" id="sunInfo">Laden...</div>
-            <div class="time-overlay3d" id="timeOverlay3D">12:00</div>
         </div>
     </div>
 
@@ -205,12 +195,13 @@
         const sunLight = new THREE.DirectionalLight(0xffcc33, 2.8); 
         sunLight.castShadow = true;
         
-        sunLight.shadow.camera.left = -15; 
-        sunLight.shadow.camera.right = 15;
-        sunLight.shadow.camera.top = 15;
-        sunLight.shadow.camera.bottom = -15;
+        // SHADOW OPTIMALISATIE: Bereik vergroot zodat schaduw ver over de grond kan vallen
+        sunLight.shadow.camera.left = -40; 
+        sunLight.shadow.camera.right = 40;
+        sunLight.shadow.camera.top = 40;
+        sunLight.shadow.camera.bottom = -40;
         sunLight.shadow.camera.near = 1;
-        sunLight.shadow.camera.far = 100;
+        sunLight.shadow.camera.far = 150;
         sunLight.shadow.mapSize.set(2048, 2048);
         
         sunLight.shadow.bias = -0.0005; 
@@ -232,6 +223,13 @@
             modelGroup.clear();
             const wallMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
             const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.DoubleSide });
+            
+            // NIEUW: De Grond eromheen (grote, subtiele donkere cirkel om randen te vermijden)
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b }); 
+            const ground = new THREE.Mesh(new THREE.CylinderGeometry(80, 80, 0.1, 64), groundMat);
+            ground.position.set(0, -0.15, 0); // Net iets onder de vloer van het appartement
+            ground.receiveShadow = true;
+            modelGroup.add(ground);
 
             const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 10), floorMat);
             floor.receiveShadow = true;
@@ -296,8 +294,6 @@
             }
 
             modelGroup.rotation.y = (180 - roomRotation) * Math.PI / 180;
-
-            document.getElementById('timeOverlay3D').textContent = currentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
             // 2D Sync
             mapSimulationLayer.clearLayers();
