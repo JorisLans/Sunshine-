@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zonlicht Simulator</title>
+    <title>Zonlicht Simulator - Heliodon View</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
@@ -86,15 +86,15 @@
 
         /* Options Box */
         .options-box { 
-            display: flex; gap: 24px; background: #f8fafc; padding: 16px; 
+            display: flex; gap: 12px; background: #f8fafc; padding: 10px; 
             border-radius: 8px; border: 1px solid #e2e8f0; align-items: center;
         }
         .options-box label { 
-            display: flex; align-items: center; gap: 8px; font-size: 13px; 
+            display: flex; align-items: center; gap: 8px; font-size: 12px; 
             color: #334155; text-transform: none; cursor: pointer; font-weight: 500;
         }
         .options-box input[type="checkbox"] {
-            width: 16px; height: 16px; cursor: pointer; accent-color: #3b82f6;
+            width: 14px; height: 14px; cursor: pointer; accent-color: #3b82f6;
         }
         
         /* Glassmorphism Overlays in 3D View */
@@ -152,31 +152,34 @@
             <label>Oriëntatie Appartement: <span class="val-text" id="rotationVal">180</span>°</label>
             <input type="range" id="rotationSlider" min="0" max="360" value="180">
             
-            <div style="display: flex; justify-content: space-between; margin-top: 4px;">
-                <label>Camera Perspectief</label>
-                <label>Architectuur</label>
+            <div style="display: flex; gap: 16px; margin-top: 4px;">
+                <div style="flex: 2;">
+                    <label>Camera Perspectief</label>
+                    <div class="buttons">
+                        <button id="camVrij" class="active-cam" onclick="setCameraView('vrij')">Vrij</button>
+                        <button id="camHemel" onclick="setCameraView('hemel')">Hemel</button>
+                        <button id="camBinnen" onclick="setCameraView('binnen')">Binnen</button>
+                        <button id="camBuiten" onclick="setCameraView('buiten')">Buiten</button>
+                    </div>
+                </div>
+                
+                <div style="flex: 1;">
+                    <label>Architectuur</label>
+                    <div class="options-box">
+                        <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Dak</label>
+                        <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Muren</label>
+                    </div>
+                </div>
             </div>
             
-            <div style="display: flex; gap: 16px;">
-                <div class="buttons" style="flex: 1;">
-                    <button id="camVrij" class="active-cam" onclick="setCameraView('vrij')">Vrij</button>
-                    <button id="camBinnen" onclick="setCameraView('binnen')">Binnen</button>
-                    <button id="camBuiten" onclick="setCameraView('buiten')">Buiten</button>
-                </div>
-
-                <div class="options-box" style="flex: 1; margin: 0; padding: 10px;">
-                    <label><input type="checkbox" id="roofToggle" checked onchange="updateSimulation()"> Dak</label>
-                    <label><input type="checkbox" id="wallsToggle" checked onchange="updateSimulation()"> Muren</label>
-                </div>
-            </div>
-            
-            <p class="footer-note">Zonlicht Simulator © 2026</p>
+            <p class="footer-note">Zonlicht Simulator © 2026 | Heliodon Editie</p>
         </div>
     </div>
 
     <script>
         let lat = 51.0289, lng = 3.0142, currentDate = new Date(), roomRotation = 180;
         const earthRadius = 6378137;
+        let isHemelView = false;
         const timeSlider = document.getElementById('timeSlider');
         const datePicker = document.getElementById('datePicker');
         
@@ -202,7 +205,7 @@
         // --- THREE.JS ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x020205);
-        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
@@ -218,15 +221,12 @@
         const sunLight = new THREE.DirectionalLight(0xffcc33, 2.8); 
         sunLight.castShadow = true;
         
-        sunLight.shadow.camera.left = -40; 
-        sunLight.shadow.camera.right = 40;
-        sunLight.shadow.camera.top = 40;
-        sunLight.shadow.camera.bottom = -40;
-        sunLight.shadow.camera.near = 1;
-        sunLight.shadow.camera.far = 150;
+        // SHADOW OPTIMALISATIE: Bereik vergroot zodat schaduw ver over de grond kan vallen
+        sunLight.shadow.camera.left = -50; sunLight.shadow.camera.right = 50;
+        sunLight.shadow.camera.top = 50; sunLight.shadow.camera.bottom = -50;
+        sunLight.shadow.camera.near = 1; sunLight.shadow.camera.far = 200;
         sunLight.shadow.mapSize.set(2048, 2048);
-        sunLight.shadow.bias = -0.0005; 
-        sunLight.shadow.normalBias = 0.05; 
+        sunLight.shadow.bias = -0.0005; sunLight.shadow.normalBias = 0.05; 
         
         scene.add(sunLight);
 
@@ -239,6 +239,33 @@
 
         let modelGroup = new THREE.Group();
         scene.add(modelGroup);
+
+        // --- HELIODON / HEMEL VIEW ELEMENTEN ---
+        let helioGroup = new THREE.Group();
+        scene.add(helioGroup);
+        helioGroup.visible = false;
+
+        // Hemelkoepel wireframe (Cylinder met halve bol bovenkant is beter)
+        const domeMat = new THREE.MeshBasicMaterial({ color: 0x444444, wireframe: true, transparent: true, opacity: 0.2 });
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(70, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+        dome.position.set(0, -0.1, 0);
+        helioGroup.add(dome);
+        
+        // Kompas-kom op de grond
+        const komMat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true, transparent: true, opacity: 0.3 });
+        const kom = new THREE.Mesh(new THREE.CylinderGeometry(70, 70, 0.1, 64), komMat);
+        kom.position.set(0, -0.2, 0);
+        helioGroup.add(kom);
+
+        // Conceptuele 'Middellijn' (Noord-Zuid)
+        const meridianMat = new THREE.LineBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.5 });
+        const meridianPoints = [];
+        for (let i = 0; i <= 32; i++) {
+            let angle = (i / 32) * Math.PI;
+            meridianPoints.push(new THREE.Vector3(0, 70 * Math.sin(angle), -70 * Math.cos(angle)));
+        }
+        const meridian = new THREE.Line(new THREE.BufferGeometry().setFromPoints(meridianPoints), meridianMat);
+        helioGroup.add(meridian);
 
         function update3DModel() {
             modelGroup.clear();
@@ -293,25 +320,38 @@
         function setCameraView(viewType) {
             // Update knop stijlen
             document.getElementById('camVrij').classList.remove('active-cam');
+            document.getElementById('camHemel').classList.remove('active-cam');
             document.getElementById('camBinnen').classList.remove('active-cam');
             document.getElementById('camBuiten').classList.remove('active-cam');
             
+            isHemelView = false;
+            helioGroup.visible = false;
+            scene.background = new THREE.Color(0x020205);
+
             if (viewType === 'vrij') {
                 document.getElementById('camVrij').classList.add('active-cam');
                 camera.position.set(18, 15, 18);
                 controls3d.target.set(0, 0, 0);
+                scene.background = new THREE.Color(0x0a0a1a);
+            } else if (viewType === 'hemel') {
+                document.getElementById('camHemel').classList.add('active-cam');
+                // Hoge hoek, top-down-ish, isotopisch gevoel
+                camera.position.set(-60, 45, 60);
+                controls3d.target.set(0, 0, 0);
+                isHemelView = true;
+                helioGroup.visible = true;
+                scene.background = new THREE.Color(0x0a0a0d); // Donkere blueprint look
             } else if (viewType === 'binnen') {
                 document.getElementById('camBinnen').classList.add('active-cam');
-                // Sta in de kamer (y=1.6m), kijk naar buiten (z=10)
                 camera.position.set(0, 1.6, -2);
                 controls3d.target.set(0, 1.6, 10);
             } else if (viewType === 'buiten') {
                 document.getElementById('camBuiten').classList.add('active-cam');
-                // Sta ver buiten, kijk naar het gebouw (en dus richting de lucht/zon)
                 camera.position.set(-25, 8, 25);
                 controls3d.target.set(0, 2, 0);
             }
             controls3d.update();
+            updateSimulation(); // Update de zon-baan lijn als we naar Hemel view gaan
         }
 
         function updateSimulation() {
@@ -320,13 +360,19 @@
             let azimuth = sunPos.azimuth; 
             let altitude = sunPos.altitude;
 
-            const dist = 60; // Zon iets verder gezet zodat deze mooi in beeld is vanaf buiten
+            // Fysieke Zon (DirectionalLight)
+            const dist = 80; // Iets verder zodat de heliodon view de zon kan tonen
             const x = -dist * Math.sin(azimuth) * Math.cos(altitude);
             const y = dist * Math.sin(altitude);
             const z = dist * Math.cos(azimuth) * Math.cos(altitude);
 
             sunLight.position.set(x, y, z);
-            sunSphere.position.set(x, y, z);
+            
+            // Conceptuele Zon (Bol in de lucht) - Zweeft over de hemelkoepel
+            const xSph = -70 * Math.sin(azimuth) * Math.cos(altitude);
+            const ySph = 70 * Math.sin(altitude);
+            const zSph = 70 * Math.cos(azimuth) * Math.cos(altitude);
+            sunSphere.position.set(xSph, ySph, zSph);
             
             if (altitude > 0) {
                 sunLight.intensity = 2.8;
@@ -357,10 +403,40 @@
             L.polygon([getMapPoint(-s,s), getMapPoint(s,s), getMapPoint(s,s+tD), getMapPoint(-s,s+tD)], {color:'#555', weight:1, fillColor:'#bbb', fillOpacity:0.4}).addTo(mapSimulationLayer);
             L.polyline([getMapPoint(-w,s), getMapPoint(w,s)], {color:'#3498db', weight:4}).addTo(mapSimulationLayer);
 
+            // BEREKENING ZON-BAAN (ALLEEN VOOR HEMEL VIEW)
+            if (isHemelView) {
+                let pathMat = new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 2, transparent: true, opacity: 0.8 });
+                let pathPoints = [];
+                let testDate = new Date(currentDate);
+                testDate.setHours(0, 0, 0, 0);
+
+                // Bereken elke 15 minuten de zonstand voor de huidige dag
+                for (let i = 0; i <= 24 * 4; i++) {
+                    let sPos = SunCalc.getPosition(testDate, lat, lng);
+                    if (sPos.altitude > -0.01) { // Alleen boven de horizon
+                        pathPoints.push(new THREE.Vector3(
+                            -70 * Math.sin(sPos.azimuth) * Math.cos(sPos.altitude),
+                            70 * Math.sin(sPos.altitude),
+                            70 * Math.cos(sPos.azimuth) * Math.cos(sPos.altitude)
+                        ));
+                    }
+                    testDate.setMinutes(testDate.getMinutes() + 15);
+                }
+                
+                // Verwijder oude baan, voeg nieuwe toe
+                helioGroup.children = helioGroup.children.filter(child => child !== helioGroup.sunPathLine);
+                if (pathPoints.length > 1) {
+                    const geometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+                    helioGroup.sunPathLine = new THREE.Line(geometry, pathMat);
+                    helioGroup.add(helioGroup.sunPathLine);
+                }
+            }
+
             document.getElementById('sunInfo').innerHTML = 
                 `<strong>Locatie:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>` +
                 `<strong>Hoogte:</strong> ${(altitude * 180 / Math.PI).toFixed(1)}°<br>` +
-                `<strong>Status:</strong> ${altitude > 0 ? 'Gouden zon' : 'Nacht'}`;
+                `<strong>Asimut:</strong> ${(azimuth * 180 / Math.PI + 180).toFixed(1)}°` + 
+                `${altitude > 0 ? '' : ' (Nacht)'}`;
         }
 
         // --- UI & LOOP ---
@@ -420,7 +496,7 @@
                 renderer.setSize(w, h);
                 camera.aspect = w / h;
                 camera.updateProjectionMatrix();
-                controls3d.update(); // Zorgt ervoor dat je nog steeds vrij kunt kijken vanuit je standpunt
+                controls3d.update();
                 renderer.render(scene, camera);
             }
         }
