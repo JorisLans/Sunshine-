@@ -230,6 +230,7 @@
         
         scene.add(sunLight);
 
+        // De visuele bol
         const sunSphereMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 1 });
         const sunSphere = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), sunSphereMat);
         scene.add(sunSphere);
@@ -245,19 +246,16 @@
         scene.add(helioGroup);
         helioGroup.visible = false;
 
-        // Hemelkoepel wireframe (Cylinder met halve bol bovenkant is beter)
         const domeMat = new THREE.MeshBasicMaterial({ color: 0x444444, wireframe: true, transparent: true, opacity: 0.2 });
         const dome = new THREE.Mesh(new THREE.SphereGeometry(70, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
         dome.position.set(0, -0.1, 0);
         helioGroup.add(dome);
         
-        // Kompas-kom op de grond
         const komMat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true, transparent: true, opacity: 0.3 });
         const kom = new THREE.Mesh(new THREE.CylinderGeometry(70, 70, 0.1, 64), komMat);
         kom.position.set(0, -0.2, 0);
         helioGroup.add(kom);
 
-        // Conceptuele 'Middellijn' (Noord-Zuid)
         const meridianMat = new THREE.LineBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.5 });
         const meridianPoints = [];
         for (let i = 0; i <= 32; i++) {
@@ -318,7 +316,6 @@
 
         // --- CAMERA PERSPECTIEVEN ---
         function setCameraView(viewType) {
-            // Update knop stijlen
             document.getElementById('camVrij').classList.remove('active-cam');
             document.getElementById('camHemel').classList.remove('active-cam');
             document.getElementById('camBinnen').classList.remove('active-cam');
@@ -335,12 +332,11 @@
                 scene.background = new THREE.Color(0x0a0a1a);
             } else if (viewType === 'hemel') {
                 document.getElementById('camHemel').classList.add('active-cam');
-                // Hoge hoek, top-down-ish, isotopisch gevoel
                 camera.position.set(-60, 45, 60);
                 controls3d.target.set(0, 0, 0);
                 isHemelView = true;
                 helioGroup.visible = true;
-                scene.background = new THREE.Color(0x0a0a0d); // Donkere blueprint look
+                scene.background = new THREE.Color(0x0a0a0d); 
             } else if (viewType === 'binnen') {
                 document.getElementById('camBinnen').classList.add('active-cam');
                 camera.position.set(0, 1.6, -2);
@@ -351,7 +347,7 @@
                 controls3d.target.set(0, 2, 0);
             }
             controls3d.update();
-            updateSimulation(); // Update de zon-baan lijn als we naar Hemel view gaan
+            updateSimulation(); 
         }
 
         function updateSimulation() {
@@ -360,19 +356,23 @@
             let azimuth = sunPos.azimuth; 
             let altitude = sunPos.altitude;
 
-            // Fysieke Zon (DirectionalLight)
-            const dist = 80; // Iets verder zodat de heliodon view de zon kan tonen
-            const x = -dist * Math.sin(azimuth) * Math.cos(altitude);
-            const y = dist * Math.sin(altitude);
-            const z = dist * Math.cos(azimuth) * Math.cos(altitude);
-
-            sunLight.position.set(x, y, z);
+            // Fysieke Lichtbron (Blijft altijd op dezelfde afstand voor correcte schaduwen)
+            const lightDist = 80; 
+            const lx = -lightDist * Math.sin(azimuth) * Math.cos(altitude);
+            const ly = lightDist * Math.sin(altitude);
+            const lz = lightDist * Math.cos(azimuth) * Math.cos(altitude);
+            sunLight.position.set(lx, ly, lz);
             
-            // Conceptuele Zon (Bol in de lucht) - Zweeft over de hemelkoepel
-            const xSph = -70 * Math.sin(azimuth) * Math.cos(altitude);
-            const ySph = 70 * Math.sin(altitude);
-            const zSph = 70 * Math.cos(azimuth) * Math.cos(altitude);
-            sunSphere.position.set(xSph, ySph, zSph);
+            // Visuele Bol (Wordt verplaatst naargelang perspectief)
+            let sphereDist = isHemelView ? 70 : 400; // 70m op de koepel, 400m in andere weergaven
+            let sphereScale = isHemelView ? 1 : 12; // Schaal groter op 400m afstand zodat hij zichtbaar is
+            
+            const sx = -sphereDist * Math.sin(azimuth) * Math.cos(altitude);
+            const sy = sphereDist * Math.sin(altitude);
+            const sz = sphereDist * Math.cos(azimuth) * Math.cos(altitude);
+            
+            sunSphere.position.set(sx, sy, sz);
+            sunSphere.scale.set(sphereScale, sphereScale, sphereScale);
             
             if (altitude > 0) {
                 sunLight.intensity = 2.8;
@@ -410,10 +410,9 @@
                 let testDate = new Date(currentDate);
                 testDate.setHours(0, 0, 0, 0);
 
-                // Bereken elke 15 minuten de zonstand voor de huidige dag
                 for (let i = 0; i <= 24 * 4; i++) {
                     let sPos = SunCalc.getPosition(testDate, lat, lng);
-                    if (sPos.altitude > -0.01) { // Alleen boven de horizon
+                    if (sPos.altitude > -0.01) { 
                         pathPoints.push(new THREE.Vector3(
                             -70 * Math.sin(sPos.azimuth) * Math.cos(sPos.altitude),
                             70 * Math.sin(sPos.altitude),
@@ -423,7 +422,6 @@
                     testDate.setMinutes(testDate.getMinutes() + 15);
                 }
                 
-                // Verwijder oude baan, voeg nieuwe toe
                 helioGroup.children = helioGroup.children.filter(child => child !== helioGroup.sunPathLine);
                 if (pathPoints.length > 1) {
                     const geometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
